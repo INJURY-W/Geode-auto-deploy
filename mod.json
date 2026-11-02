@@ -1,0 +1,127 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"android": "2.2081"
+	},
+	"id": "heum.path-builder",
+	"name": "Path Builder",
+	"version": "v1.0.0",
+	"developer": "heum",
+	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3"
+	},
+	"settings": {
+		"style": {
+			"type": "string",
+			"name": "Placement Style",
+			"description": "<cy>basic</c>: floor/ceiling blocks + a few spikes under each jump.\n<cy>dense</c>: fill every safe spot with spikes and use tighter corridors.\n<cy>blocks-only</c>: no spikes at all.",
+			"default": "basic",
+			"one-of": [
+				"basic",
+				"dense",
+				"blocks-only"
+			]
+		},
+		"mode-cube": {
+			"type": "bool",
+			"name": "Cube (and Robot)",
+			"description": "Generate platforms and jump spikes for cube/robot parts.",
+			"default": true
+		},
+		"mode-ship": {
+			"type": "bool",
+			"name": "Ship (and Swing)",
+			"description": "Generate a corridor around ship/swing parts.",
+			"default": true
+		},
+		"mode-wave": {
+			"type": "bool",
+			"name": "Wave",
+			"description": "Generate a corridor around wave parts.",
+			"default": true
+		},
+		"mode-ball": {
+			"type": "bool",
+			"name": "Ball (and Spider)",
+			"description": "Generate floor/ceiling blocks and spikes for ball/spider parts.",
+			"default": true
+		},
+		"mode-ufo": {
+			"type": "bool",
+			"name": "UFO",
+			"description": "Generate a corridor around UFO parts.",
+			"default": true
+		},
+		"max-spikes": {
+			"type": "int",
+			"name": "Spikes per Jump (basic)",
+			"description": "Max spikes placed under one jump in basic style.",
+			"default": 2,
+			"min": 1,
+			"max": 6,
+			"control": {
+				"slider": true,
+				"input": true
+			}
+		},
+		"spike-clearance": {
+			"type": "float",
+			"name": "Spike Clearance",
+			"description": "Extra safe distance (units, 30 = 1 block) between the player hitbox and spike hitboxes.",
+			"default": 4.0,
+			"min": 0.0,
+			"max": 30.0,
+			"control": {
+				"slider": true,
+				"input": true
+			}
+		},
+		"ship-margin": {
+			"type": "float",
+			"name": "Ship/UFO Corridor Margin",
+			"description": "Free space (units) kept above and below the ship/UFO path.",
+			"default": 30.0,
+			"min": 0.0,
+			"max": 120.0,
+			"control": {
+				"slider": true,
+				"input": true
+			}
+		},
+		"wave-margin": {
+			"type": "float",
+			"name": "Wave Corridor Margin",
+			"description": "Free space (units) kept above and below the wave path.",
+			"default": 12.0,
+			"min": 0.0,
+			"max": 90.0,
+			"control": {
+				"slider": true,
+				"input": true
+			}
+		},
+		"block-id": {
+			"type": "int",
+			"name": "Block Object ID",
+			"description": "Object ID used for blocks (1 = default block).",
+			"default": 1,
+			"min": 1,
+			"max": 4600
+		},
+		"spike-id": {
+			"type": "int",
+			"name": "Spike Object ID",
+			"description": "Object ID used for spikes (8 = default spike).",
+			"default": 8,
+			"min": 1,
+			"max": 4600
+		},
+		"select-generated": {
+			"type": "bool",
+			"name": "Select Generated Objects",
+			"description": "Select everything that was placed so you can move or delete it in one go.",
+			"default": true
+		}
+	}
+}
