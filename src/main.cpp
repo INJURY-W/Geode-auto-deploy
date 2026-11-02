@@ -75,6 +75,19 @@ namespace {
     struct VariantResult { int index; int delta; bool survived; };
     std::vector<VariantResult> g_results;
 
+    // --- SIM: the bot replays the saved clicks and taps every orb it passes through ---
+    struct SimOrb { CCRect rect; float x; bool dash = false; bool used = false; };
+    bool g_simming = false;
+    bool g_simDone = false;
+    bool g_simDied = false;
+    pb::Macro g_simMacro;                     // clicks being replayed
+    std::vector<pb::InputEvent> g_simAdded;   // presses/releases added for orbs
+    std::vector<SimOrb> g_simOrbs;
+    int g_simReleaseAt = -1;                  // end the orb tap on this step
+    int g_simLastStep = 0;
+    void finishSim();
+    void simStep(PlayerObject* p, int step);
+
     // -----------------------------------------------------------------------
     bool showMessages() { return Mod::get()->getSettingValue<bool>("show-messages"); }
 
@@ -164,6 +177,58 @@ namespace {
                 }
             }
             if (g_s.aligned) botFire(p, g_s.count - g_s.offset);
+            if (g_simming && g_s.aligned) simStep(p, g_s.count - g_s.offset);
+        }
+    }
+
+    // SIM: tap each orb the player is about to enter. GD tests orbs at the next
+    // physics step, so the press goes in on the step before the player's hitbox
+    // (moved by its last step's motion) first overlaps the orb. Already holding:
+    // release + press. Otherwise a short tap (dash orbs: held a moment), unless
+    // the recorded clicks press or release in between.
+    int g_simTapBotIndex = 0;
+    float g_simPrevX = 0.f, g_simPrevY = 0.f;
+    bool g_simHavePrev = false;
+
+    void simStep(PlayerObject* p, int step) {
+        g_simLastStep = step;
+        auto tap = [&](bool down) {
+            g_injecting = true;
+            if (down) p->pushButton(PlayerButton::Jump); else p->releaseButton(PlayerButton::Jump);
+            g_injecting = false;
+            g_simAdded.push_back({step, down, p->getPositionX()});
+        };
+        if (g_simReleaseAt >= 0 && step >= g_simReleaseAt) {
+            // Only end our own tap - if the recording clicked since, it owns the button now.
+            if (g_holding && static_cast<int>(g_s.index) == g_simTapBotIndex) tap(false);
+            g_simReleaseAt = -1;
+        }
+        auto pos = p->getPosition();
+        float dx = g_simHavePrev ? pos.x - g_simPrevX : 0.f;
+        float dy = g_simHavePrev ? pos.y - g_simPrevY : 0.f;
+        g_simPrevX = pos.x; g_simPrevY = pos.y; g_simHavePrev = true;
+
+        auto now = p->getObjectRect();
+        auto next = now;
+        next.origin.x += dx;
+        next.origin.y += dy;
+        for (auto& orb : g_simOrbs) {
+            if (orb.used) continue;
+            if (!next.intersectsRect(orb.rect) && !now.intersectsRect(orb.rect)) continue;
+            orb.used = true;
+            bool wasHolding = g_holding;
+            if (wasHolding) tap(false);
+            tap(true);
+            if (!wasHolding) {
+                int hold = 1;
+                if (orb.dash) {
+                    float tps = g_simMacro.tps > 0.f ? g_simMacro.tps : 240.f;
+                    hold = std::max(1, static_cast<int>(tps * 0.3f));
+                }
+                g_simReleaseAt = step + hold;
+                g_simTapBotIndex = static_cast<int>(g_s.index);
+            }
+            break;   // one orb per step
         }
     }
 
@@ -264,6 +329,19 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             startSession(Where::Editor, this, true, &g_checkMacro, false);
             return;
         }
+        if (g_simming) {
+            g_samples.clear();
+            g_samples.reserve(16384);
+            g_recording = true;          // the SIM run becomes the new path
+            g_stoppedByDeath = false;
+            g_simAdded.clear();
+            g_simReleaseAt = -1;
+            g_simLastStep = 0;
+            g_simHavePrev = false;
+            for (auto& o : g_simOrbs) o.used = false;
+            startSession(Where::Editor, this, true, &g_simMacro, false);
+            return;
+        }
 
         g_samples.clear();
         g_samples.reserve(16384);
@@ -288,6 +366,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         // right inside the collision check, when the player dies - so any stop we did
         // not start is a death, unless the player tapped the STOP button.
         bool checkRunOpen = g_checking && !g_testDone;
+        bool simRunOpen = g_simming && !g_simDone;
         bool userStopped = g_userStopped;
         g_userStopped = false;
         LevelEditorLayer::onStopPlaytest();
@@ -300,6 +379,13 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             CCDirector::get()->getScheduler()->setTimeScale(1.f);
             Loader::get()->queueInMainThread([] { finishCheckTest(); });  // clears the progress label
             notify("Frame-perfect check cancelled.", NotificationIcon::Warning);
+        }
+
+        if (simRunOpen) {
+            if (!userStopped) { g_simDone = true; g_simDied = true; }   // GD stopped it: a death
+            else { g_simming = false; notify("SIM cancelled.", NotificationIcon::Warning); }
+            CCDirector::get()->getScheduler()->setTimeScale(1.f);
+            Loader::get()->queueInMainThread([] { finishSim(); });
         }
 
         if (wasHandRun) {
@@ -335,7 +421,7 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
     // 120 fps frames per real frame. Each one behaves exactly like normal play.
     void update(float dt) {
         auto lel = LevelEditorLayer::get();
-        bool checkRun = g_checking && lel && static_cast<GJBaseGameLayer*>(lel) == this &&
+        bool checkRun = (g_checking || g_simming) && lel && static_cast<GJBaseGameLayer*>(lel) == this &&
                         lel->m_playbackMode == PlaybackMode::Playing;
         if (!checkRun) {
             if (g_s.where == Where::Editor && g_s.recordInputs && g_s.layer == this && dt > 0.f) {
@@ -360,7 +446,10 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         // Same frame rate as the run was recorded at (falls back to the live one).
         float kFrame = g_macro.frameDt > 0.f ? g_macro.frameDt : dt;
         for (int i = 0; i < g_checkSpeed; i++) {
-            if (!g_checking || g_testDone || lel->m_playbackMode != PlaybackMode::Playing) break;
+            if (lel->m_playbackMode != PlaybackMode::Playing) break;
+            if (g_checking && g_testDone) break;
+            if (g_simming && g_simDone) break;
+            if (!g_checking && !g_simming) break;
             GJBaseGameLayer::update(kFrame);
         }
     }
@@ -384,6 +473,16 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
 
         if (g_s.where != Where::None && g_s.layer == this && player == this->m_player1 && sessionLayerAlive()) {
             onStep(player);
+
+            if (g_simming && g_s.where == Where::Editor && !g_simDone) {
+                bool died = player->m_isDead;
+                bool reachedEnd = !died && g_s.aligned && (g_s.count - g_s.offset) >= g_simMacro.endStep;
+                if (died || reachedEnd) {
+                    g_simDone = true;
+                    g_simDied = died;
+                    Loader::get()->queueInMainThread([] { finishSim(); });
+                }
+            }
 
             if (g_checking && g_s.where == Where::Editor && !g_testDone) {
                 bool died = player->m_isDead;
@@ -528,7 +627,7 @@ class $modify(PBEditorUI, EditorUI) {
             auto label = CCLabelBMFont::create(text, "bigFont.fnt");
             label->setScale(0.45f);
             auto spr = CircleButtonSprite::create(label, color, CircleBaseSize::Small);
-            spr->setScale(0.7f);
+            spr->setScale(0.65f);
             return spr;
         };
         auto autoBtn = CCMenuItemSpriteExtra::create(makeSpr("AUTO", CircleBaseColor::Green), this, menu_selector(PBEditorUI::onPathBuild));
@@ -541,6 +640,8 @@ class $modify(PBEditorUI, EditorUI) {
         botBtn->toggle(g_botEnabled);
         botBtn->setID("bot-button"_spr);
         auto chkBtn = CCMenuItemSpriteExtra::create(makeSpr("CHK", CircleBaseColor::Pink), this, menu_selector(PBEditorUI::onPathCheck));
+        auto simBtn = CCMenuItemSpriteExtra::create(makeSpr("SIM", CircleBaseColor::DarkPurple), this, menu_selector(PBEditorUI::onPathSim));
+        simBtn->setID("sim-button"_spr);
         chkBtn->setID("check-button"_spr);
 
         auto winSize = CCDirector::get()->getWinSize();
@@ -576,14 +677,16 @@ class $modify(PBEditorUI, EditorUI) {
         else base.x += 70.f;
         menu->setPosition(base);
         // Stacked vertically: AUTO, SET, BOT, CHK
-        autoBtn->setPosition({18.f, -15.f});
-        setBtn->setPosition({18.f, -45.f});
-        botBtn->setPosition({18.f, -75.f});
-        chkBtn->setPosition({18.f, -105.f});
+        autoBtn->setPosition({18.f, -14.f});
+        setBtn->setPosition({18.f, -42.f});
+        botBtn->setPosition({18.f, -70.f});
+        chkBtn->setPosition({18.f, -98.f});
+        simBtn->setPosition({18.f, -126.f});
         menu->addChild(autoBtn);
         menu->addChild(setBtn);
         menu->addChild(botBtn);
         menu->addChild(chkBtn);
+        menu->addChild(simBtn);
         this->addChild(menu, 10);
         return true;
     }
@@ -614,6 +717,93 @@ class $modify(PBEditorUI, EditorUI) {
     // physics step earlier or later. If the player still survives, that click is
     // not frame perfect. A baseline run first proves the unchanged clicks pass.
     // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // SIM: replay the saved clicks and tap every orb the player passes through.
+    // The run becomes the new recording (clicks + path), ready for AUTO.
+    // -----------------------------------------------------------------------
+    void onPathSim(CCObject*) {
+        if (g_simming) {
+            g_simming = false;
+            if (m_editorLayer->m_playbackMode != PlaybackMode::Not) this->onStopPlaytest(nullptr);
+            notify("SIM cancelled.", NotificationIcon::Warning);
+            return;
+        }
+        if (g_checking) { notify("Wait for CHK to finish.", NotificationIcon::Warning); return; }
+        if (m_editorLayer->m_playbackMode != PlaybackMode::Not) {
+            notify("Stop the playtest first.", NotificationIcon::Warning);
+            return;
+        }
+        if (g_macro.empty() || g_macro.endStep <= 0) {
+            notify("No saved clicks - play once yourself first (just pass over the orbs).", NotificationIcon::Warning);
+            return;
+        }
+        g_simOrbs.clear();
+        if (auto objs = m_editorLayer->m_objects) {
+            for (auto obj : CCArrayExt<GameObject*>(objs)) {
+                switch (obj->m_objectType) {
+                    case GameObjectType::YellowJumpRing: case GameObjectType::PinkJumpRing:
+                    case GameObjectType::GravityRing: case GameObjectType::GreenRing:
+                    case GameObjectType::DropRing: case GameObjectType::RedJumpRing:
+                    case GameObjectType::CustomRing: case GameObjectType::DashRing:
+                    case GameObjectType::GravityDashRing: case GameObjectType::SpiderOrb:
+                    case GameObjectType::TeleportOrb: break;
+                    default: continue;
+                }
+                auto r = obj->getObjectRect();
+                bool dash = obj->m_objectType == GameObjectType::DashRing ||
+                            obj->m_objectType == GameObjectType::GravityDashRing;
+                g_simOrbs.push_back({r, r.getMidX(), dash, false});
+            }
+        }
+        if (g_simOrbs.empty()) {
+            notify("No orbs in the level - place some first.", NotificationIcon::Warning);
+            return;
+        }
+        std::sort(g_simOrbs.begin(), g_simOrbs.end(), [](auto const& a, auto const& b) { return a.x < b.x; });
+        g_simMacro = g_macro;
+        g_simDone = false;
+        g_simDied = false;
+        g_simming = true;
+        g_checkSpeed = std::max<int>(1, static_cast<int>(Mod::get()->getSettingValue<int64_t>("check-speed")));
+        Loader::get()->queueInMainThread([] {
+            auto lel = LevelEditorLayer::get();
+            if (lel && lel->m_editorUI && g_simming) lel->m_editorUI->onPlaytest(nullptr);
+        });
+    }
+
+    void afterSim() {
+        if (m_editorLayer->m_playbackMode != PlaybackMode::Not) this->onStopPlaytest(nullptr);
+        if (!g_simDone) return;          // cancelled
+        g_simming = false;
+        CCDirector::get()->getScheduler()->setTimeScale(1.f);
+
+        // New recording = the replayed clicks (up to where the run ended) + the orb taps.
+        pb::Macro m = g_simMacro;
+        int end = std::max(1, g_simLastStep);
+        std::vector<pb::InputEvent> merged;
+        for (auto const& e : g_simMacro.inputs) if (e.step <= end) merged.push_back(e);
+        for (auto const& e : g_simAdded) merged.push_back(e);
+        std::stable_sort(merged.begin(), merged.end(), [](auto const& a, auto const& b) { return a.step < b.step; });
+        m.inputs = std::move(merged);
+        m.endStep = end;
+        g_macro = m;
+        if (!g_macroKey.empty()) g_macro.save(macroPath(g_macroKey));
+
+        int used = 0;
+        std::string missed;
+        for (size_t i = 0; i < g_simOrbs.size(); i++) {
+            if (g_simOrbs[i].used) { used++; continue; }
+            missed += fmt::format("- orb #{} at {:.1f} blocks\n", i + 1, g_simOrbs[i].x / 30.f);
+        }
+        std::string text = fmt::format("# Tapped {} / {} orbs\n\n", used, g_simOrbs.size());
+        if (g_simDied) text += "**The player died** before the end - the new recording stops there. "
+                               "Re-record that part by hand or move the orbs.\n\n";
+        text += "The run (orb taps included) is now the saved recording: press **AUTO** to place spikes "
+                "around it, then **CHK**.\n\n";
+        if (!missed.empty()) text += "## Not reached\n\n" + missed;
+        MDPopup::create("Orb SIM", text, "OK")->show();
+    }
+
     void onPathCheck(CCObject*) {
         if (g_checking) {
             stopCheck();
@@ -865,6 +1055,12 @@ class $modify(PBEditorUI, EditorUI) {
 };
 
 namespace {
+    void finishSim() {
+        auto lel = LevelEditorLayer::get();
+        if (!lel || !lel->m_editorUI) { g_simming = false; return; }
+        static_cast<PBEditorUI*>(lel->m_editorUI)->afterSim();
+    }
+
     void finishCheckTest() {
         auto lel = LevelEditorLayer::get();
         if (!lel || !lel->m_editorUI) { g_checking = false; return; }

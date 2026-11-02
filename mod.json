@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.11.0",
+	"version": "v1.12.0",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -244,8 +244,8 @@
 		},
 		"check-speed": {
 			"type": "int",
-			"name": "Check Speed",
-			"description": "How many frames CHK runs per real frame (up to 100x). Each frame is played at the frame rate your clicks were recorded at, so results don't depend on the speed. Very high values can make the phone lag or get warm.",
+			"name": "Check / SIM Speed",
+			"description": "How many frames CHK and SIM run per real frame (up to 100x). Each frame is played at the frame rate your clicks were recorded at, so results don't depend on the speed. Very high values can make the phone lag or get warm.",
 			"default": 20,
 			"min": 1,
 			"max": 100,
