@@ -77,7 +77,26 @@ int main(int argc, char** argv) {
     if (style == "blocks") st.style = Style::BlocksOnly;
     if (style == "tight") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 15.f;
         st.saws = {{88, 16.f}, {89, 10.f}}; st.sawChance = 0.3f; st.sizeMin = 0.6f; st.sizeMax = 1.4f; st.seed = 7; }
-    auto out = generate(path, st, {});
+    std::vector<SolidRect> solids;
+    if (style == "attach") {
+        st.style = Style::Attach; st.tightGap = 0.2f; st.spikeSpacing = 10.f; st.sizeMin = 0.3f; st.sizeMax = 1.5f;
+        // "Structures": 30-wide block columns 40 units above/below the path, on the grid.
+        std::map<int, std::pair<float, float>> col;
+        for (auto const& sm : path) {
+            if (sm.mode != Mode::Wave && sm.mode != Mode::Ship) continue;
+            int c = (int)std::floor(sm.x / 30.f);
+            auto it = col.find(c);
+            if (it == col.end()) col[c] = {sm.y - sm.halfH, sm.y + sm.halfH};
+            else { it->second.first = std::min(it->second.first, sm.y - sm.halfH); it->second.second = std::max(it->second.second, sm.y + sm.halfH); }
+        }
+        for (auto const& [c, mm] : col) {
+            float fTop = std::floor((mm.first - 40.f) / 30.f) * 30.f;
+            float cBot = std::ceil((mm.second + 40.f) / 30.f) * 30.f;
+            if (fTop > 90.f) solids.push_back({c * 30.f, 90.f, c * 30.f + 30.f, fTop});
+            solids.push_back({c * 30.f, cBot, c * 30.f + 30.f, cBot + 60.f});
+        }
+    }
+    auto out = generate(path, st, {}, solids);
 
     // Safety check: no block cell or spike hazard may overlap the player at any frame.
     int bad = 0;
@@ -121,7 +140,11 @@ int main(int argc, char** argv) {
         if (p.radius > 0.f) saws++;
         if (p.isSpike) { smin = std::min(smin, p.scale); smax = std::max(smax, p.scale); }
     }
-    if (style == "tight") std::printf("tight: saws=%d scale=%.2f..%.2f\n", saws, smin, smax);
+    if (style == "tight" || style == "attach") {
+        int fitted = 0;
+        for (auto const& p : out) if (p.isSpike && p.scale < st.sizeMax - 1e-3f) fitted++;
+        std::printf("%s: saws=%d scale=%.2f..%.2f solids=%zu fitted-to-gap=%d\n", style.c_str(), saws, smin, smax, solids.size(), fitted);
+    }
     std::printf("style=%s samples=%zu blocks=%d spikes=%d collisions=%d\n",
                 style.c_str(), path.size(), blocks, spikes, bad);
 

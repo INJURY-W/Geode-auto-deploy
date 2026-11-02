@@ -22,7 +22,9 @@ struct Sample {
 };
 
 // Tight = spikes only, placed off-grid right against the player's real hitbox.
-enum class Style : uint8_t { Basic, Dense, BlocksOnly, Tight };
+// Attach = spikes only, stuck onto the player's own blocks (top faces below the path,
+// bottom faces above it) and sized so their tip sits tightGap away from the path.
+enum class Style : uint8_t { Basic, Dense, BlocksOnly, Tight, Attach };
 
 struct Settings {
     Style style = Style::Basic;
@@ -58,6 +60,9 @@ struct Placement {
     float radius = 0.f;     // saws: hazard circle radius after scaling (0 = not a saw)
 };
 
+// A solid block already in the level (world rect), for the attach style.
+struct SolidRect { float l, b, r, t; };
+
 // Objects already in the level, used so we don't stack on top of them.
 struct ExistingCell { int ix; int iy; };
 
@@ -69,7 +74,8 @@ constexpr int kFirstRow = 3;
 std::vector<Placement> generate(
     std::vector<Sample> const& samples,
     Settings const& settings,
-    std::vector<ExistingCell> const& existing
+    std::vector<ExistingCell> const& existing,
+    std::vector<SolidRect> const& solids = {}
 );
 
 } // namespace pb

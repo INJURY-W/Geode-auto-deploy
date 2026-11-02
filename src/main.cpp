@@ -190,6 +190,7 @@ namespace {
         st.style = style == "dense" ? pb::Style::Dense
                  : style == "blocks-only" ? pb::Style::BlocksOnly
                  : style == "tight" ? pb::Style::Tight
+                 : style == "attach" ? pb::Style::Attach
                  : pb::Style::Basic;
         st.cube = mod->getSettingValue<bool>("mode-cube");
         st.ship = mod->getSettingValue<bool>("mode-ship");
@@ -804,7 +805,20 @@ class $modify(PBEditorUI, EditorUI) {
             }
         }
 
-        auto placements = pb::generate(g_samples, settings, existing);
+        // Attach style: the player's own solid blocks are the structures to stick spikes on.
+        std::vector<pb::SolidRect> solids;
+        if (settings.style == pb::Style::Attach) {
+            if (auto objs = m_editorLayer->m_objects) {
+                for (auto obj : CCArrayExt<GameObject*>(objs)) {
+                    if (obj->m_objectType != GameObjectType::Solid) continue;
+                    auto r = obj->getObjectRect();
+                    if (r.size.width <= 0.f || r.size.height <= 0.f) continue;
+                    solids.push_back({r.getMinX(), r.getMinY(), r.getMaxX(), r.getMaxY()});
+                }
+            }
+        }
+
+        auto placements = pb::generate(g_samples, settings, existing, solids);
         if (placements.empty()) {
             notify("Nothing to place (check the mode toggles in SET).", NotificationIcon::Info);
             return;

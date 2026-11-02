@@ -104,8 +104,8 @@ bool snapSurface(float y, int& line) {
 class Builder {
 public:
     Builder(std::vector<Sample> const& samples, Settings const& st,
-            std::vector<ExistingCell> const& existing)
-        : m_samples(samples), m_st(st), m_dense(densify(samples)) {
+            std::vector<ExistingCell> const& existing, std::vector<SolidRect> const& solids)
+        : m_samples(samples), m_st(st), m_solids(solids), m_dense(densify(samples)) {
         for (auto const& c : existing) m_occupied.insert(key(c.ix, c.iy));
         // Index (densified) samples by the grid columns their padded hitbox touches.
         for (size_t i = 0; i < m_dense.size(); i++) {
@@ -536,7 +536,76 @@ public:
         return true;
     }
 
+    // -----------------------------------------------------------------------
+    // Attach style: for every column along the path, find the player's own block
+    // face right under the path (or the ground) and right above it, and stick a
+    // spike on each - scaled so its hitbox ends exactly tightGap from the path.
+    // -----------------------------------------------------------------------
+    void attachSpikes() {
+        if (m_samples.empty()) return;
+        float step = std::max(3.f, m_st.spikeSpacing);
+        float xMin = 1e9f, xMax = -1e9f;
+        for (auto const& sm : m_samples) {
+            if (!modeEnabled(sm.mode, m_st)) continue;
+            xMin = std::min(xMin, sm.x);
+            xMax = std::max(xMax, sm.x);
+        }
+        for (float x = xMin; x <= xMax + 0.01f; x += step) {
+            float plo = 1e9f, phi = -1e9f;
+            segmentExtremes(x - 0.5f, x + 0.5f, plo, phi);
+            if (phi < plo) continue;
+
+            // Floor face: the highest block top (or the ground) still below the path.
+            float floorY = kGroundTop;
+            for (auto const& b : m_solids) {
+                if (x < b.l || x > b.r || b.t > plo + 0.01f) continue;
+                floorY = std::max(floorY, b.t);
+            }
+            attachSpike(x, floorY, false);
+
+            // Ceiling face: the lowest block bottom still above the path.
+            float ceilY = 1e9f;
+            for (auto const& b : m_solids) {
+                if (x < b.l || x > b.r || b.b < phi - 0.01f) continue;
+                ceilY = std::min(ceilY, b.b);
+            }
+            if (ceilY < 1e8f) attachSpike(x, ceilY, true);
+        }
+    }
+
+    // Spike with its base on the face at height `face`, pointing toward the path.
+    bool attachSpike(float x, float face, bool ceiling) {
+        float c = m_st.tightGap;
+        float sMin = std::min(m_st.sizeMin, m_st.sizeMax), sMax = std::max(m_st.sizeMin, m_st.sizeMax);
+        // Distance from the face to the far edge of the hitbox, per unit of scale:
+        // half the spike's height (15) + hitbox offset + hitbox half height.
+        float k = 15.f + m_st.spikeOffY + m_st.spikeHalfH;
+        if (k <= 0.f) return false;
+        float scale = sMax;
+        for (int it = 0; it < 6; it++) {
+            float hw = m_st.spikeHalfW * scale, ox = std::fabs(m_st.spikeOffX) * scale;
+            float lo = 1e9f, hi = -1e9f;
+            segmentExtremes(x - ox - hw - c, x + ox + hw + c, lo, hi);
+            if (hi < lo) break;
+            float room = ceiling ? face - (hi + c) : (lo - c) - face;
+            float fit = room / k;
+            if (fit >= scale - 1e-4f) break;   // fits at this size
+            scale = fit;                       // smaller spike -> narrower window, retry
+        }
+        if (scale < sMin) return false;        // face too close to the path
+        float y = ceiling ? face - 15.f * scale : face + 15.f * scale;
+        if (m_occupied.count(key(cellOf(x), cellOf(y)))) return false;
+        Placement p{m_st.spikeID, x, y, ceiling ? 180.f : 0.f, true};
+        p.scale = scale;
+        m_out.push_back(p);
+        return true;
+    }
+
     std::vector<Placement> run() {
+        if (m_st.style == Style::Attach) {
+            attachSpikes();
+            return std::move(m_out);
+        }
         groundBlocks();
         if (m_st.style == Style::Tight) tightCorridors();
         else corridors();
@@ -548,6 +617,7 @@ private:
     static constexpr float kPad = 45.f;
     std::vector<Sample> const& m_samples;
     Settings const& m_st;
+    std::vector<SolidRect> const& m_solids;
     std::vector<Sample> m_dense;
     std::unordered_map<int, std::vector<size_t>> m_columns;
     std::unordered_map<int, std::vector<size_t>> m_segColumns;
@@ -567,10 +637,11 @@ private:
 std::vector<Placement> generate(
     std::vector<Sample> const& samples,
     Settings const& settings,
-    std::vector<ExistingCell> const& existing
+    std::vector<ExistingCell> const& existing,
+    std::vector<SolidRect> const& solids
 ) {
     if (samples.size() < 2) return {};
-    Builder b(samples, settings, existing);
+    Builder b(samples, settings, existing, solids);
     return b.run();
 }
 
