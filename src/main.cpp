@@ -29,6 +29,7 @@ namespace {
     bool g_botActive = false;          // replaying during the current playtest
     bool g_sessionActive = false;      // inside a playtest started from the editor
     int g_stepCount = 0;               // physics steps finished in this playtest (player 1)
+    float g_lastHitW = 0.f, g_lastHitH = 0.f; // for the info message
     size_t g_botIndex = 0;
     bool g_injecting = false;          // the bot itself is pressing
 
@@ -169,7 +170,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             g_recording = false;
             if (g_samples.size() >= 2) {
                 notify(
-                    fmt::format("Path recorded ({} physics steps). Tap AUTO to build.", g_samples.size()),
+                    fmt::format("Path recorded ({} steps, hitbox {:.1f}x{:.1f}).", g_samples.size(), g_lastHitW, g_lastHitH),
                     NotificationIcon::Success
                 );
             }
@@ -207,21 +208,23 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
             return;
         }
 
+        // Center = the player's position (the same point GD draws the path trail from).
+        // Only the size comes from the hitbox rect; its cached origin can lag behind.
         auto pos = p->getPosition();
         pb::Sample s;
         s.x = pos.x;
         s.y = pos.y;
         s.size = p->m_vehicleSize > 0.f ? p->m_vehicleSize : 1.f;
-        // Real hitbox from the game (the wave's is much smaller than the cube's).
         auto rect = p->getObjectRect();
-        if (rect.size.width > 0.5f && rect.size.height > 0.5f) {
-            s.x = rect.getMidX();
-            s.y = rect.getMidY();
+        if (rect.size.width > 0.5f && rect.size.width <= 35.f &&
+            rect.size.height > 0.5f && rect.size.height <= 35.f) {
             s.halfW = rect.size.width * 0.5f;
             s.halfH = rect.size.height * 0.5f;
         } else {
             s.halfW = s.halfH = 15.f * s.size;
         }
+        g_lastHitW = s.halfW * 2.f;
+        g_lastHitH = s.halfH * 2.f;
         s.mode = modeOf(p);
         s.upsideDown = p->m_isUpsideDown;
         s.onGround = p->m_isOnGround;
@@ -245,7 +248,7 @@ class $modify(PBEditorUI, EditorUI) {
             auto label = CCLabelBMFont::create(text, "bigFont.fnt");
             label->setScale(0.45f);
             auto spr = CircleButtonSprite::create(label, color, CircleBaseSize::Small);
-            spr->setScale(0.8f);
+            spr->setScale(0.7f);
             return CCMenuItemSpriteExtra::create(spr, this, cb);
         };
 
@@ -258,7 +261,7 @@ class $modify(PBEditorUI, EditorUI) {
             auto label = CCLabelBMFont::create(text, "bigFont.fnt");
             label->setScale(0.45f);
             auto spr = CircleButtonSprite::create(label, color, CircleBaseSize::Small);
-            spr->setScale(0.8f);
+            spr->setScale(0.7f);
             return spr;
         };
         auto botBtn = CCMenuItemToggler::create(
@@ -268,17 +271,22 @@ class $modify(PBEditorUI, EditorUI) {
         botBtn->toggle(g_botEnabled);
         botBtn->setID("bot-button"_spr);
 
-        // Place the buttons just below the playtest buttons (left side of the editor).
+        // Column to the right of the music/playtest buttons, starting level with the
+        // music button so it ends well above the bottom toolbar.
         auto winSize = CCDirector::get()->getWinSize();
-        CCPoint base = {12.f, winSize.height * 0.55f};
+        CCPoint base = {12.f, winSize.height * 0.8f};
         if (auto playtestMenu = this->getChildByID("playtest-menu")) {
-            base = CCPoint(playtestMenu->getPositionX(), playtestMenu->boundingBox().getMinY() - 4.f);
+            base.x = playtestMenu->getPositionX();
+            base.y = playtestMenu->boundingBox().getMinY() + 60.f;
+        }
+        if (auto playbackMenu = this->getChildByID("playback-menu")) {
+            base.y = playbackMenu->boundingBox().getMaxY();
         }
         menu->setPosition(base);
         // Stacked vertically: AUTO, SET, BOT
-        autoBtn->setPosition({18.f, -18.f});
-        setBtn->setPosition({18.f, -56.f});
-        botBtn->setPosition({18.f, -94.f});
+        autoBtn->setPosition({18.f, -15.f});
+        setBtn->setPosition({18.f, -47.f});
+        botBtn->setPosition({18.f, -79.f});
         menu->addChild(autoBtn);
         menu->addChild(setBtn);
         menu->addChild(botBtn);
@@ -339,8 +347,10 @@ class $modify(PBEditorUI, EditorUI) {
             if (r.size.width > 0.5f && r.size.width < 25.f && r.size.height > 0.5f && r.size.height < 25.f) {
                 settings.spikeHalfW = r.size.width * 0.5f;
                 settings.spikeHalfH = r.size.height * 0.5f;
-                settings.spikeOffX = r.getMidX();
-                settings.spikeOffY = r.getMidY();
+                // Offsets beyond the spike itself mean a stale rect; ignore them.
+                float ox = r.getMidX(), oy = r.getMidY();
+                settings.spikeOffX = std::fabs(ox) <= 6.f ? ox : 0.f;
+                settings.spikeOffY = std::fabs(oy) <= 6.f ? oy : 0.f;
             }
         }
 
