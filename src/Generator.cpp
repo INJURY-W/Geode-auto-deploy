@@ -408,6 +408,8 @@ public:
             for (size_t i : it->second) {
                 if (!seen.insert(i).second) continue;
                 auto pr = playerRect(m_samples[i]);
+                bool near = i < m_continuous.size() && m_continuous[i];
+                if (near) pr = pr.expanded(portalExtra());   // bigger gap near portals
                 if (!(pr.r < l || pr.l > r)) {           // touching counts, like GD
                     hi = std::max(hi, pr.t);
                     lo = std::min(lo, pr.b);
@@ -423,7 +425,8 @@ public:
         auto const& a = m_samples[i];
         auto const& b = m_samples[i + 1];
         if (std::fabs(b.x - a.x) > 60.f || std::fabs(b.y - a.y) > 60.f) return;  // teleport
-        float hw = std::max(a.halfW, b.halfW), hh = std::max(a.halfH, b.halfH);
+        float hw = std::max(a.halfW, b.halfW) + portalExtra();
+        float hh = std::max(a.halfH, b.halfH) + portalExtra();
         float xa = l - hw, xb = r + hw;
         float dx = b.x - a.x;
         float t0, t1;
@@ -474,7 +477,11 @@ private:
     std::unordered_map<int, std::vector<size_t>> m_columns;
     std::unordered_map<int, std::vector<size_t>> m_segColumns;
     std::vector<bool> m_continuous;               // segment i -> i+1 checked as a line
-    static constexpr size_t kTransitionSteps = 8;
+    // Samples on each side of a change that count as "near" it. Steps can have two
+    // samples (before/after GD's push-out), so this covers roughly 8-16 steps.
+    static constexpr size_t kTransitionSteps = 16;
+    // Extra room on top of the normal tight gap near portals/pads/mode changes.
+    float portalExtra() const { return std::max(0.f, m_st.portalGap - m_st.tightGap); }
     std::unordered_set<int64_t> m_occupied;
     std::unordered_set<int64_t> m_ourBlocks;
     std::vector<Placement> m_out;

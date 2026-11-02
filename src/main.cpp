@@ -196,6 +196,7 @@ namespace {
         st.shipMargin = blocks("ship-margin-blocks");
         st.waveMargin = blocks("wave-margin-blocks");
         st.tightGap = pixels("tight-gap");
+        st.portalGap = pixels("portal-gap");
         st.spikeSpacing = pixels("tight-spacing");
         st.blockID = static_cast<int>(mod->getSettingValue<int64_t>("block-id"));
         st.spikeID = static_cast<int>(mod->getSettingValue<int64_t>("spike-id"));

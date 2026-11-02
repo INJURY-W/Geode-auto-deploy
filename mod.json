@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.7.3",
+	"version": "v1.8.0",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -86,6 +86,22 @@
 			"type": "float",
 			"name": "Tight Gap (px)",
 			"description": "Tight style only. Gap between your hitbox and each spike hitbox in free-move pixels (30 px = 1 block). 0 = touching, 1 = one pixel.",
+			"default": 1.0,
+			"min": 0.0,
+			"max": 30.0,
+			"control": {
+				"arrow-step": 0.5,
+				"big-arrows": true,
+				"big-arrow-step": 5.0,
+				"slider": true,
+				"slider-step": 0.5,
+				"input": true
+			}
+		},
+		"portal-gap": {
+			"type": "float",
+			"name": "Portal Gap (px)",
+			"description": "Tight style only. Gap used instead of Tight Gap right around portals, speed portals, pads, gravity and size changes, where GD's timing inside a physics step can differ slightly. Elsewhere Tight Gap is used. If this is smaller than Tight Gap, Tight Gap is used everywhere.",
 			"default": 1.0,
 			"min": 0.0,
 			"max": 30.0,

@@ -33,6 +33,7 @@ struct Settings {
     float waveMargin = 12.f;
     float spikeSpacing = 15.f;  // tight style: horizontal distance between spikes (units)
     float tightGap = 1.f;       // tight style: gap between player and spike hitboxes (units)
+    float portalGap = 1.f;      // tight style: gap used instead near portals/pads/mode changes
     // Spike hazard hitbox (read from the game when possible). Offset is the hitbox
     // center relative to the object position when unrotated.
     float spikeHalfW = 3.f, spikeHalfH = 6.f;
