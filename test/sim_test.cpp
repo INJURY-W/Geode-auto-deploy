@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
     Settings st;
     if (style == "dense") st.style = Style::Dense;
     if (style == "blocks") st.style = Style::BlocksOnly;
-    if (style == "tight") { st.style = Style::Tight; st.tightGap = 1.f; st.spikeSpacing = 15.f; }
+    if (style == "tight") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 15.f; }
     auto out = generate(path, st, {});
 
     // Safety check: no block cell or spike hazard may overlap the player at any frame.
@@ -91,7 +91,13 @@ int main(int argc, char** argv) {
             for (int k = 0; k <= 40 && !hit; k++) {
                 float tt = k / 40.f, sx = a.x + (c.x - a.x) * tt, sy = a.y + (c.y - a.y) * tt;
                 float hw = std::max(a.halfW, c.halfW), hh = std::max(a.halfH, c.halfH);
-                if (l < sx + hw - 0.01f && sx - hw < r - 0.01f && b < sy + hh - 0.01f && sy - hh < t - 0.01f) hit = true;
+                if (p.isSpike) {
+                    // Hazards: inclusive, like CCRect::intersectsRect (touching = death)
+                    if (l <= sx + hw && sx - hw <= r && b <= sy + hh && sy - hh <= t) hit = true;
+                } else {
+                    // Solids: standing on / sliding along a block is fine, overlap isn't
+                    if (l < sx + hw - 0.5f && sx - hw < r - 0.5f && b < sy + hh - 0.5f && sy - hh < t - 0.5f) hit = true;
+                }
             }
         }
         if (hit) bad++;

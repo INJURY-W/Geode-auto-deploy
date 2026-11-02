@@ -1,5 +1,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/EditorUI.hpp>
+#include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/LevelEditorLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/ui/GeodeUI.hpp>
@@ -100,7 +101,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         LevelEditorLayer::onPlaytest();
         if (fresh) {
             g_samples.clear();
-            g_samples.reserve(4096);
+            g_samples.reserve(16384);
             g_recording = true;
             g_stoppedByDeath = false;
             g_holding = false;
@@ -114,20 +115,31 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             g_recording = false;
             if (g_samples.size() >= 2) {
                 notify(
-                    fmt::format("Path recorded ({} frames). Tap AUTO to build.", g_samples.size()),
+                    fmt::format("Path recorded ({} physics steps). Tap AUTO to build.", g_samples.size()),
                     NotificationIcon::Success
                 );
             }
         }
     }
+};
 
-    void postUpdate(float dt) {
-        LevelEditorLayer::postUpdate(dt);
-        if (!g_recording || g_stoppedByDeath) return;
-        if (m_playbackMode != PlaybackMode::Playing) return;
+// ---------------------------------------------------------------------------
+// Record every physics step (GD runs several per frame). Recording here, right
+// before GD checks collisions, captures exactly the positions and hitboxes GD
+// tests against hazards - including the sharp corner of every wave click.
+// ---------------------------------------------------------------------------
+class $modify(PBGameLayer, GJBaseGameLayer) {
+    int checkCollisions(PlayerObject* player, float dt, bool ignoreDamage) {
+        recordStep(player);
+        return GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+    }
 
-        auto p = m_player1;
-        if (!p) return;
+    void recordStep(PlayerObject* p) {
+        if (!g_recording || g_stoppedByDeath || !p) return;
+        auto lel = LevelEditorLayer::get();
+        if (!lel || static_cast<GJBaseGameLayer*>(lel) != this) return;
+        if (lel->m_playbackMode != PlaybackMode::Playing) return;
+        if (p != lel->m_player1) return;
         if (p->m_isDead) {
             // Anything after a death would describe a path the player can't survive.
             g_stoppedByDeath = true;
@@ -142,6 +154,8 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         // Real hitbox from the game (the wave's is much smaller than the cube's).
         auto rect = p->getObjectRect();
         if (rect.size.width > 0.5f && rect.size.height > 0.5f) {
+            s.x = rect.getMidX();
+            s.y = rect.getMidY();
             s.halfW = rect.size.width * 0.5f;
             s.halfH = rect.size.height * 0.5f;
         } else {
@@ -223,7 +237,21 @@ class $modify(PBEditorUI, EditorUI) {
             }
         }
 
-        auto placements = pb::generate(g_samples, readSettings(), existing);
+        auto settings = readSettings();
+
+        // Read the spike's real hazard hitbox from the game instead of guessing it.
+        if (auto probe = GameObject::createWithKey(settings.spikeID)) {
+            probe->setPosition({0.f, 0.f});
+            auto r = probe->getObjectRect();
+            if (r.size.width > 0.5f && r.size.width < 60.f && r.size.height > 0.5f && r.size.height < 60.f) {
+                settings.spikeHalfW = r.size.width * 0.5f;
+                settings.spikeHalfH = r.size.height * 0.5f;
+                settings.spikeOffX = r.getMidX();
+                settings.spikeOffY = r.getMidY();
+            }
+        }
+
+        auto placements = pb::generate(g_samples, settings, existing);
         if (placements.empty()) {
             notify("Nothing to place (check the mode toggles in SET).", NotificationIcon::Info);
             return;

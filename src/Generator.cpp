@@ -31,12 +31,13 @@ Rect playerRect(Sample const& s) {
     return {s.x - s.halfW, s.y - s.halfH, s.x + s.halfW, s.y + s.halfH};
 }
 
-// GD's spike (ID 8) hazard hitbox: a 6 x 12 box around the object's center.
-constexpr float kSpikeHalfW = 3.f;
-constexpr float kSpikeHalfH = 6.f;
-
-Rect freeSpikeRect(float x, float y) {
-    return {x - kSpikeHalfW, y - kSpikeHalfH, x + kSpikeHalfW, y + kSpikeHalfH};
+// Hazard rect of a spike whose object position is (x, y); a 180-degree spike
+// has its hitbox offset mirrored.
+Rect freeSpikeRect(Settings const& st, float x, float y, bool ceiling) {
+    float ox = ceiling ? -st.spikeOffX : st.spikeOffX;
+    float oy = ceiling ? -st.spikeOffY : st.spikeOffY;
+    float cx = x + ox, cy = y + oy;
+    return {cx - st.spikeHalfW, cy - st.spikeHalfH, cx + st.spikeHalfW, cy + st.spikeHalfH};
 }
 
 // Recorded frames are ~5 units apart; GD checks collisions more often than that.
@@ -109,6 +110,16 @@ public:
         for (size_t i = 0; i < m_dense.size(); i++) {
             auto r = playerRect(m_dense[i]).expanded(kPad);
             for (int c = cellOf(r.l); c <= cellOf(r.r); c++) m_columns[c].push_back(i);
+        }
+        // Index path segments (consecutive recorded steps) for exact tight placement.
+        for (size_t i = 0; i < m_samples.size(); i++) {
+            size_t j = (i + 1 < m_samples.size()) ? i + 1 : i;
+            auto const& a = m_samples[i];
+            auto const& b = m_samples[j];
+            if (std::fabs(b.x - a.x) > 60.f || std::fabs(b.y - a.y) > 60.f) j = i; // teleport
+            float hw = std::max(a.halfW, m_samples[j].halfW) + kPad;
+            float x0 = std::min(a.x, m_samples[j].x) - hw, x1 = std::max(a.x, m_samples[j].x) + hw;
+            for (int c = cellOf(x0); c <= cellOf(x1); c++) m_segColumns[c].push_back(i);
         }
     }
 
@@ -337,31 +348,75 @@ public:
                 x1 = std::max(x1, m_samples[j].x);
                 j++;
             }
+            float hw = m_st.spikeHalfW, hh = m_st.spikeHalfH;
             for (float x = x0; x <= x1 + 0.01f; x += step) {
+                // Hitbox x-range is the same for both rows only if there's no x offset;
+                // use the wider span of the two to stay safe.
+                float ox = std::fabs(m_st.spikeOffX);
                 float lo = 1e9f, hi = -1e9f;
-                float l = x - kSpikeHalfW - c, r = x + kSpikeHalfW + c;
-                for (int col = cellOf(l); col <= cellOf(r); col++) {
-                    auto it = m_columns.find(col);
-                    if (it == m_columns.end()) continue;
-                    for (size_t k : it->second) {
-                        auto pr = playerRect(m_dense[k]);
-                        if (pr.r <= l || pr.l >= r) continue;
-                        lo = std::min(lo, pr.b);
-                        hi = std::max(hi, pr.t);
-                    }
-                }
+                float l = x - ox - hw - c, r = x + ox + hw + c;
+                segmentExtremes(l, r, lo, hi);
                 if (hi < lo) continue;
-                placeFreeSpike(x, hi + c + kSpikeHalfH, true);
-                float fy = lo - c - kSpikeHalfH;
+                // Ceiling spike (180): hitbox bottom sits exactly `c` above the path.
+                placeFreeSpike(x, hi + c + hh + m_st.spikeOffY, true);
+                // Floor spike: hitbox top sits exactly `c` below the path.
+                float fy = lo - c - hh - m_st.spikeOffY;
                 if (fy >= kGroundTop + 15.f) placeFreeSpike(x, fy, false);
             }
             i = j;
         }
     }
 
+    // Exact highest top / lowest bottom of the player hitbox over every path segment
+    // whose hitbox touches the x-window [l, r]. The path between two recorded physics
+    // steps is treated as a straight line (GD only tests at the steps themselves, so
+    // this is the same or slightly safer than the game).
+    void segmentExtremes(float l, float r, float& lo, float& hi) const {
+        std::unordered_set<size_t> seen;
+        for (int col = cellOf(l); col <= cellOf(r); col++) {
+            auto it = m_segColumns.find(col);
+            if (it == m_segColumns.end()) continue;
+            for (size_t i : it->second) {
+                if (!seen.insert(i).second) continue;
+                auto const& a = m_samples[i];
+                size_t j = (i + 1 < m_samples.size()) ? i + 1 : i;
+                auto const& b0 = m_samples[j];
+                bool teleport = std::fabs(b0.x - a.x) > 60.f || std::fabs(b0.y - a.y) > 60.f;
+                auto const& b = teleport ? a : b0;
+                float hw = std::max(a.halfW, b.halfW), hh = std::max(a.halfH, b.halfH);
+                // Hitbox touches the window (inclusive) when center x is in [l - hw, r + hw].
+                float xa = l - hw, xb = r + hw;
+                float dx = b.x - a.x;
+                float t0, t1;
+                if (std::fabs(dx) < 1e-6f) {
+                    if (a.x < xa || a.x > xb) continue;
+                    t0 = 0.f; t1 = 1.f;
+                } else {
+                    float ta = (xa - a.x) / dx, tb = (xb - a.x) / dx;
+                    t0 = std::max(0.f, std::min(ta, tb));
+                    t1 = std::min(1.f, std::max(ta, tb));
+                    if (t0 > t1) continue;
+                }
+                float y0 = a.y + (b.y - a.y) * t0, y1 = a.y + (b.y - a.y) * t1;
+                hi = std::max(hi, std::max(y0, y1) + hh);
+                lo = std::min(lo, std::min(y0, y1) - hh);
+            }
+        }
+    }
+
     bool placeFreeSpike(float x, float y, bool ceiling) {
         if (m_occupied.count(key(cellOf(x), cellOf(y)))) return false;   // existing object here
-        if (hitsPath(freeSpikeRect(x, y), std::max(0.f, m_st.tightGap - 0.25f))) return false;
+        // Placement already keeps the hitbox exactly `tightGap` away from every segment;
+        // re-check against the other side of the path (e.g. a spike row that a later
+        // part of the path loops back into).
+        float lo = 1e9f, hi = -1e9f;
+        auto rc = freeSpikeRect(m_st, x, y, ceiling);
+        float g = m_st.tightGap;
+        segmentExtremes(rc.l - g, rc.r + g, lo, hi);
+        if (hi >= lo && !(rc.b - g > hi || rc.t + g < lo)) {
+            // The window's path spans across the spike; only safe if spike is fully outside.
+            if (!(ceiling ? rc.b - g >= hi - 1e-4f : rc.t + g <= lo + 1e-4f)) return false;
+        }
         m_out.push_back({m_st.spikeID, x, y, ceiling ? 180.f : 0.f, true});
         return true;
     }
@@ -380,6 +435,7 @@ private:
     Settings const& m_st;
     std::vector<Sample> m_dense;
     std::unordered_map<int, std::vector<size_t>> m_columns;
+    std::unordered_map<int, std::vector<size_t>> m_segColumns;
     std::unordered_set<int64_t> m_occupied;
     std::unordered_set<int64_t> m_ourBlocks;
     std::vector<Placement> m_out;

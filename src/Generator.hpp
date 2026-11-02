@@ -33,6 +33,10 @@ struct Settings {
     float waveMargin = 12.f;
     float spikeSpacing = 15.f;  // tight style: horizontal distance between spikes (units)
     float tightGap = 1.f;       // tight style: gap between player and spike hitboxes (units)
+    // Spike hazard hitbox (read from the game when possible). Offset is the hitbox
+    // center relative to the object position when unrotated.
+    float spikeHalfW = 3.f, spikeHalfH = 6.f;
+    float spikeOffX = 0.f, spikeOffY = 0.f;
     int blockID = 1;
     int spikeID = 8;
 };
