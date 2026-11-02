@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.0.0",
+	"version": "v1.1.0",
 	"developer": "heum",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -15,12 +15,13 @@
 		"style": {
 			"type": "string",
 			"name": "Placement Style",
-			"description": "<cy>basic</c>: floor/ceiling blocks + a few spikes under each jump.\n<cy>dense</c>: fill every safe spot with spikes and use tighter corridors.\n<cy>blocks-only</c>: no spikes at all.",
+			"description": "<cy>basic</c>: floor/ceiling blocks + a few spikes under each jump.\n<cy>dense</c>: fill every safe spot with spikes and use tighter corridors.\n<cy>blocks-only</c>: no spikes at all.\n<cy>tight</c>: spikes only, placed off-grid right against your real hitbox (pixel-close). Use with low Spike Clearance.",
 			"default": "basic",
 			"one-of": [
 				"basic",
 				"dense",
-				"blocks-only"
+				"blocks-only",
+				"tight"
 			]
 		},
 		"mode-cube": {
@@ -68,10 +69,22 @@
 		"spike-clearance": {
 			"type": "float",
 			"name": "Spike Clearance",
-			"description": "Extra safe distance (units, 30 = 1 block) between the player hitbox and spike hitboxes.",
+			"description": "Extra safe distance (units, 30 = 1 block) between the player hitbox and spike hitboxes. For tight style, 1 is very tight; 0 touches the edge.",
 			"default": 4.0,
 			"min": 0.0,
 			"max": 30.0,
+			"control": {
+				"slider": true,
+				"input": true
+			}
+		},
+		"spike-spacing": {
+			"type": "float",
+			"name": "Spike Spacing (tight)",
+			"description": "Horizontal distance between spikes in tight style (units, 30 = 1 block). Lower = more spikes.",
+			"default": 15.0,
+			"min": 3.0,
+			"max": 60.0,
 			"control": {
 				"slider": true,
 				"input": true

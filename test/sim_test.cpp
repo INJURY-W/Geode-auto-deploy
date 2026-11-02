@@ -18,7 +18,8 @@ int main(int argc, char** argv) {
     float floorY = 105.f;
 
     auto push = [&](Mode m, bool ground, bool hold, bool upside = false) {
-        path.push_back({x, y, 1.f, m, upside, ground, hold});
+        float h = (m == Mode::Wave) ? 5.f : 15.f;   // wave hitbox is much smaller in GD
+        path.push_back({x, y, 1.f, h, h, m, upside, ground, hold});
     };
 
     // Cube: run, 3 jumps on the floor, then a jump onto a 1-block step and back down.
@@ -73,6 +74,7 @@ int main(int argc, char** argv) {
     Settings st;
     if (style == "dense") st.style = Style::Dense;
     if (style == "blocks") st.style = Style::BlocksOnly;
+    if (style == "tight") { st.style = Style::Tight; st.spikeClearance = 1.f; st.spikeSpacing = 15.f; }
     auto out = generate(path, st, {});
 
     // Safety check: no block cell or spike hazard may overlap the player at any frame.
@@ -80,12 +82,19 @@ int main(int argc, char** argv) {
     for (auto const& p : out) {
         float l, b, r, t;
         if (!p.isSpike) { l = p.x - 15; r = p.x + 15; b = p.y - 15; t = p.y + 15; }
-        else if (p.rotation == 0) { l = p.x - 6; r = p.x + 6; b = p.y - 15; t = p.y + 5; }
-        else { l = p.x - 6; r = p.x + 6; b = p.y - 5; t = p.y + 15; }
-        for (auto const& s : path) {
-            float h = 15 * s.size;
-            if (l < s.x + h - 0.5f && s.x - h < r - 0.5f && b < s.y + h - 0.5f && s.y - h < t - 0.5f) { bad++; break; }
+        else { l = p.x - 3; r = p.x + 3; b = p.y - 6; t = p.y + 6; }
+        // Check against the path at 0.25-unit steps (finer than the generator uses).
+        bool hit = false;
+        for (size_t i = 1; i < path.size() && !hit; i++) {
+            auto const& a = path[i - 1]; auto const& c = path[i];
+            if (std::fabs(c.x - a.x) > 60 || std::fabs(c.y - a.y) > 60) continue;
+            for (int k = 0; k <= 40 && !hit; k++) {
+                float tt = k / 40.f, sx = a.x + (c.x - a.x) * tt, sy = a.y + (c.y - a.y) * tt;
+                float hw = std::max(a.halfW, c.halfW), hh = std::max(a.halfH, c.halfH);
+                if (l < sx + hw - 0.01f && sx - hw < r - 0.01f && b < sy + hh - 0.01f && sy - hh < t - 0.01f) hit = true;
+            }
         }
+        if (hit) bad++;
     }
     int blocks = 0, spikes = 0;
     for (auto const& p : out) (p.isSpike ? spikes : blocks)++;
@@ -101,6 +110,7 @@ int main(int argc, char** argv) {
     }
     for (auto const& p : out) {
         int cx = (int)std::floor(p.x / 30), cy = (int)std::floor(p.y / 30);
+        if (style == "tight" && p.isSpike) continue;  // off-grid, ASCII view would mislead
         grid[{cx, cy}] = p.isSpike ? (p.rotation == 0 ? '^' : 'v') : '#';
         maxY = std::max(maxY, cy);
     }

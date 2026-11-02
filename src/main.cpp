@@ -42,6 +42,7 @@ namespace {
         auto style = mod->getSettingValue<std::string>("style");
         st.style = style == "dense" ? pb::Style::Dense
                  : style == "blocks-only" ? pb::Style::BlocksOnly
+                 : style == "tight" ? pb::Style::Tight
                  : pb::Style::Basic;
         st.cube = mod->getSettingValue<bool>("mode-cube");
         st.ship = mod->getSettingValue<bool>("mode-ship");
@@ -50,6 +51,7 @@ namespace {
         st.ufo = mod->getSettingValue<bool>("mode-ufo");
         st.maxSpikes = static_cast<int>(mod->getSettingValue<int64_t>("max-spikes"));
         st.spikeClearance = static_cast<float>(mod->getSettingValue<double>("spike-clearance"));
+        st.spikeSpacing = static_cast<float>(mod->getSettingValue<double>("spike-spacing"));
         st.shipMargin = static_cast<float>(mod->getSettingValue<double>("ship-margin"));
         st.waveMargin = static_cast<float>(mod->getSettingValue<double>("wave-margin"));
         st.blockID = static_cast<int>(mod->getSettingValue<int64_t>("block-id"));
@@ -132,6 +134,14 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         s.x = pos.x;
         s.y = pos.y;
         s.size = p->m_vehicleSize > 0.f ? p->m_vehicleSize : 1.f;
+        // Real hitbox from the game (the wave's is much smaller than the cube's).
+        auto rect = p->getObjectRect();
+        if (rect.size.width > 0.5f && rect.size.height > 0.5f) {
+            s.halfW = rect.size.width * 0.5f;
+            s.halfH = rect.size.height * 0.5f;
+        } else {
+            s.halfW = s.halfH = 15.f * s.size;
+        }
         s.mode = modeOf(p);
         s.upsideDown = p->m_isUpsideDown;
         s.onGround = p->m_isOnGround;

@@ -13,13 +13,16 @@ struct Sample {
     float x = 0.f;          // player center (world units, 30 = 1 block)
     float y = 0.f;
     float size = 1.f;       // 1 = normal, ~0.6 = mini
+    float halfW = 15.f;     // real hitbox half-size from the game (already includes mini/wave size)
+    float halfH = 15.f;
     Mode mode = Mode::Cube;
     bool upsideDown = false;
     bool onGround = false;
     bool holding = false;   // jump button held this frame
 };
 
-enum class Style : uint8_t { Basic, Dense, BlocksOnly };
+// Tight = spikes only, placed off-grid right against the player's real hitbox.
+enum class Style : uint8_t { Basic, Dense, BlocksOnly, Tight };
 
 struct Settings {
     Style style = Style::Basic;
@@ -28,6 +31,7 @@ struct Settings {
     float spikeClearance = 4.f;
     float shipMargin = 30.f;
     float waveMargin = 12.f;
+    float spikeSpacing = 30.f;  // tight style: horizontal distance between spikes
     int blockID = 1;
     int spikeID = 8;
 };

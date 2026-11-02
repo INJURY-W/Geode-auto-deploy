@@ -20,7 +20,8 @@
 배치된 오브젝트는 **되돌리기 한 번**으로 전부 취소되고, 배치 직후 전부 선택된 상태라 바로 옮기거나 지울 수 있습니다.
 
 ## 설정 (SET)
-- **Placement Style**: `basic`(기본) / `dense`(가시 빽빽, 통로 좁게) / `blocks-only`(가시 없음)
+- **Placement Style**: `basic`(기본) / `dense`(가시 빽빽, 통로 좁게) / `blocks-only`(가시 없음) / `tight`(가시만, 격자 무시하고 실제 히트박스에 픽셀 단위로 붙임)
+- **Spike Spacing (tight)**: tight에서 가시 사이 가로 간격 (작을수록 촘촘)
 - **게임모드별 켜기/끄기**: Cube, Ship, Wave, Ball, UFO
 - **Spikes per Jump**: basic에서 점프당 최대 가시 수
 - **Spike Clearance**: 가시와 플레이어 사이 여유 거리 (30 = 1칸)

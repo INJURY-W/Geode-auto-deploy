@@ -27,11 +27,44 @@ Rect cellRect(int ix, int iy) {
     return {ix * kCell, iy * kCell, ix * kCell + kCell, iy * kCell + kCell};
 }
 
-float halfSize(Sample const& s) { return 15.f * s.size; }
-
 Rect playerRect(Sample const& s) {
-    float h = halfSize(s);
-    return {s.x - h, s.y - h, s.x + h, s.y + h};
+    return {s.x - s.halfW, s.y - s.halfH, s.x + s.halfW, s.y + s.halfH};
+}
+
+// GD's spike (ID 8) hazard hitbox: a 6 x 12 box around the object's center.
+constexpr float kSpikeHalfW = 3.f;
+constexpr float kSpikeHalfH = 6.f;
+
+Rect freeSpikeRect(float x, float y) {
+    return {x - kSpikeHalfW, y - kSpikeHalfH, x + kSpikeHalfW, y + kSpikeHalfH};
+}
+
+// Recorded frames are ~5 units apart; GD checks collisions more often than that.
+// Fill the gaps with 1-unit steps so nothing can slip between two frames.
+std::vector<Sample> densify(std::vector<Sample> const& in) {
+    std::vector<Sample> out;
+    out.reserve(in.size() * 6);
+    for (size_t i = 0; i < in.size(); i++) {
+        if (i > 0) {
+            auto const& a = in[i - 1];
+            auto const& b = in[i];
+            float dist = std::max(std::fabs(b.x - a.x), std::fabs(b.y - a.y));
+            if (dist > 1.f && dist <= 60.f) {   // > 60 = teleport, don't bridge it
+                int steps = static_cast<int>(std::ceil(dist));
+                for (int k = 1; k < steps; k++) {
+                    float t = static_cast<float>(k) / steps;
+                    Sample m = a;
+                    m.x = a.x + (b.x - a.x) * t;
+                    m.y = a.y + (b.y - a.y) * t;
+                    m.halfW = std::max(a.halfW, b.halfW);
+                    m.halfH = std::max(a.halfH, b.halfH);
+                    out.push_back(m);
+                }
+            }
+        }
+        out.push_back(in[i]);
+    }
+    return out;
 }
 
 // Spike hazard area, a bit generous compared to GD's real spike hitbox.
@@ -70,11 +103,11 @@ class Builder {
 public:
     Builder(std::vector<Sample> const& samples, Settings const& st,
             std::vector<ExistingCell> const& existing)
-        : m_samples(samples), m_st(st) {
+        : m_samples(samples), m_st(st), m_dense(densify(samples)) {
         for (auto const& c : existing) m_occupied.insert(key(c.ix, c.iy));
-        // Index samples by the grid columns their (padded) hitbox touches.
-        for (size_t i = 0; i < m_samples.size(); i++) {
-            auto r = playerRect(m_samples[i]).expanded(kPad);
+        // Index (densified) samples by the grid columns their padded hitbox touches.
+        for (size_t i = 0; i < m_dense.size(); i++) {
+            auto r = playerRect(m_dense[i]).expanded(kPad);
             for (int c = cellOf(r.l); c <= cellOf(r.r); c++) m_columns[c].push_back(i);
         }
     }
@@ -86,7 +119,7 @@ public:
             auto it = m_columns.find(c);
             if (it == m_columns.end()) continue;
             for (size_t i : it->second) {
-                if (playerRect(m_samples[i]).overlaps(a)) return true;
+                if (playerRect(m_dense[i]).overlaps(a)) return true;
             }
         }
         return false;
@@ -135,17 +168,16 @@ public:
     void groundBlocks() {
         for (auto const& s : m_samples) {
             if (!s.onGround || !isPlatformMode(s.mode) || !modeEnabled(s.mode, m_st)) continue;
-            float h = halfSize(s);
             int line;
             int iy;
             if (!s.upsideDown) {
-                if (!snapSurface(s.y - h, line)) continue;
+                if (!snapSurface(s.y - s.halfH, line)) continue;
                 iy = line - 1;          // block whose top is the surface
             } else {
-                if (!snapSurface(s.y + h, line)) continue;
+                if (!snapSurface(s.y + s.halfH, line)) continue;
                 iy = line;              // block whose bottom is the surface
             }
-            for (int ix = cellOf(s.x - h + 1.f); ix <= cellOf(s.x + h - 1.f); ix++) {
+            for (int ix = cellOf(s.x - s.halfW + 1.f); ix <= cellOf(s.x + s.halfW - 1.f); ix++) {
                 placeBlock(ix, iy);
             }
         }
@@ -177,7 +209,7 @@ public:
             if (!clicked) continue;
 
             bool ceiling = d.upsideDown;
-            float h = halfSize(d);
+            float h = d.halfH;
             int line;
             if (!snapSurface(ceiling ? d.y + h : d.y - h, line)) continue;
             int iy = ceiling ? line - 1 : line;
@@ -208,7 +240,7 @@ public:
             if (valid.empty()) continue;
 
             std::vector<int> chosen;
-            if (m_st.style == Style::Dense) {
+            if (m_st.style == Style::Dense || m_st.style == Style::Tight) {
                 chosen = valid;
             } else {
                 // Contiguous run of valid columns closest to the apex.
@@ -242,13 +274,12 @@ public:
         std::map<int, Col> cols;
         for (auto const& s : m_samples) {
             if (isPlatformMode(s.mode) || !modeEnabled(s.mode, m_st)) continue;
-            float h = halfSize(s);
             float margin = (s.mode == Mode::Wave) ? m_st.waveMargin : m_st.shipMargin;
             if (m_st.style == Style::Dense) margin *= 0.5f;
-            for (int c = cellOf(s.x - h + 1.f); c <= cellOf(s.x + h - 1.f); c++) {
+            for (int c = cellOf(s.x - s.halfW + 1.f); c <= cellOf(s.x + s.halfW - 1.f); c++) {
                 auto& col = cols[c];
-                col.minB = std::min(col.minB, s.y - h);
-                col.maxT = std::max(col.maxT, s.y + h);
+                col.minB = std::min(col.minB, s.y - s.halfH);
+                col.maxT = std::max(col.maxT, s.y + s.halfH);
                 col.margin = std::max(col.margin, margin);
             }
         }
@@ -289,9 +320,56 @@ public:
         }
     }
 
+    // Tight style: rows of spikes above and below every ship/wave/UFO part,
+    // each one pushed right up against the closest the player ever gets.
+    void tightCorridors() {
+        float c = m_st.spikeClearance;
+        float step = std::max(3.f, m_st.spikeSpacing);
+        size_t n = m_samples.size();
+        size_t i = 0;
+        while (i < n) {
+            auto const& s = m_samples[i];
+            if (isPlatformMode(s.mode) || !modeEnabled(s.mode, m_st)) { i++; continue; }
+            size_t j = i;
+            float x0 = s.x, x1 = s.x;
+            while (j < n && !isPlatformMode(m_samples[j].mode) && modeEnabled(m_samples[j].mode, m_st)) {
+                x0 = std::min(x0, m_samples[j].x);
+                x1 = std::max(x1, m_samples[j].x);
+                j++;
+            }
+            for (float x = x0; x <= x1 + 0.01f; x += step) {
+                float lo = 1e9f, hi = -1e9f;
+                float l = x - kSpikeHalfW - c, r = x + kSpikeHalfW + c;
+                for (int col = cellOf(l); col <= cellOf(r); col++) {
+                    auto it = m_columns.find(col);
+                    if (it == m_columns.end()) continue;
+                    for (size_t k : it->second) {
+                        auto pr = playerRect(m_dense[k]);
+                        if (pr.r <= l || pr.l >= r) continue;
+                        lo = std::min(lo, pr.b);
+                        hi = std::max(hi, pr.t);
+                    }
+                }
+                if (hi < lo) continue;
+                placeFreeSpike(x, hi + c + kSpikeHalfH, true);
+                float fy = lo - c - kSpikeHalfH;
+                if (fy >= kGroundTop + 15.f) placeFreeSpike(x, fy, false);
+            }
+            i = j;
+        }
+    }
+
+    bool placeFreeSpike(float x, float y, bool ceiling) {
+        if (m_occupied.count(key(cellOf(x), cellOf(y)))) return false;   // existing object here
+        if (hitsPath(freeSpikeRect(x, y), std::max(0.f, m_st.spikeClearance - 0.25f))) return false;
+        m_out.push_back({m_st.spikeID, x, y, ceiling ? 180.f : 0.f, true});
+        return true;
+    }
+
     std::vector<Placement> run() {
         groundBlocks();
-        corridors();
+        if (m_st.style == Style::Tight) tightCorridors();
+        else corridors();
         jumpSpikes();
         return std::move(m_out);
     }
@@ -300,6 +378,7 @@ private:
     static constexpr float kPad = 45.f;
     std::vector<Sample> const& m_samples;
     Settings const& m_st;
+    std::vector<Sample> m_dense;
     std::unordered_map<int, std::vector<size_t>> m_columns;
     std::unordered_set<int64_t> m_occupied;
     std::unordered_set<int64_t> m_ourBlocks;
