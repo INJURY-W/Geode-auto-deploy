@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.14.1",
+	"version": "v1.14.2",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -287,7 +287,7 @@
 		"show-messages": {
 			"type": "bool",
 			"name": "Show Messages",
-			"description": "Show info messages at the bottom of the editor (path recorded, objects placed, bot on/off). Warnings always show.",
+			"description": "Show info messages at the bottom of the editor (path recorded, objects placed, bot on/off). Editor warnings always show. In real play nothing is shown unless this is on, so showcase recordings stay clean.",
 			"default": false
 		},
 		"play-bot": {

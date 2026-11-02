@@ -509,7 +509,8 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
             GJBaseGameLayer::update(dt);
             // After a second of real play, warn once if the physics rate differs from
             // the recording - the bot's clicks only line up at the same TPS.
-            if (playRun && !g_playRateChecked && g_playDtSum >= 1.0 && g_playMacro.tps > 0.f) {
+            // Real play stays clean for recording: only shown with Show Messages on.
+            if (playRun && !g_playRateChecked && g_playDtSum >= 1.0 && g_playMacro.tps > 0.f && showMessages()) {
                 g_playRateChecked = true;
                 float live = static_cast<float>(g_s.count / g_playDtSum);
                 if (std::fabs(live - g_playMacro.tps) > 0.05f * g_playMacro.tps) {
@@ -632,7 +633,7 @@ class $modify(PBPlayLayer, PlayLayer) {
         if (Mod::get()->getSettingValue<bool>("play-bot")) {
             if (loadMacroFor(level, g_playMacro)) {
                 g_playSafe = true;
-            } else {
+            } else if (showMessages()) {
                 Loader::get()->queueInMainThread([] {
                     Notification::create("Showcase bot: no saved clicks for this level.", NotificationIcon::Warning)->show();
                 });
