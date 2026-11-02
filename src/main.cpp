@@ -21,6 +21,31 @@ namespace {
     bool g_holding = false;        // jump button currently held
     bool g_pressedThisFrame = false; // catches taps shorter than one frame
 
+    // Playtest bot: replays the clicks of the last hand-played playtest, keyed to GD's
+    // own physics step counter so every click lands on exactly the same step.
+    struct InputEvent { int step; bool down; };
+    std::vector<InputEvent> g_inputs;  // clicks from the last hand-played playtest
+    bool g_botEnabled = false;         // BOT toggle
+    bool g_botActive = false;          // replaying during the current playtest
+    bool g_sessionActive = false;      // inside a playtest started from the editor
+    bool g_stepBaseSet = false;
+    int g_stepBase = 0;
+    size_t g_botIndex = 0;
+    bool g_injecting = false;          // the bot itself is pressing
+
+    bool editorPlaying(GJBaseGameLayer* layer) {
+        auto lel = LevelEditorLayer::get();
+        return lel && static_cast<GJBaseGameLayer*>(lel) == layer &&
+               lel->m_playbackMode == PlaybackMode::Playing;
+    }
+
+    void recordInput(PlayerObject* p, bool down) {
+        if (!g_sessionActive || g_botActive || !g_stepBaseSet) return;
+        auto lel = LevelEditorLayer::get();
+        if (!lel || lel->m_player1 != p || lel->m_playbackMode != PlaybackMode::Playing) return;
+        g_inputs.push_back({lel->m_currentStep - g_stepBase, down});
+    }
+
     pb::Mode modeOf(PlayerObject* p) {
         if (p->m_isShip) return pb::Mode::Ship;
         if (p->m_isBird) return pb::Mode::Ufo;
@@ -79,6 +104,7 @@ class $modify(PBPlayerObject, PlayerObject) {
         if (button == PlayerButton::Jump && isEditorPlayer1(this)) {
             g_holding = true;
             g_pressedThisFrame = true;
+            recordInput(this, true);
         }
         return ret;
     }
@@ -87,6 +113,7 @@ class $modify(PBPlayerObject, PlayerObject) {
         bool ret = PlayerObject::releaseButton(button);
         if (button == PlayerButton::Jump && isEditorPlayer1(this)) {
             g_holding = false;
+            recordInput(this, false);
         }
         return ret;
     }
@@ -106,11 +133,24 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             g_stoppedByDeath = false;
             g_holding = false;
             g_pressedThisFrame = false;
+
+            g_sessionActive = true;
+            g_stepBaseSet = false;
+            g_botIndex = 0;
+            g_botActive = g_botEnabled && !g_inputs.empty();
+            if (g_botActive) {
+                notify(fmt::format("Bot: replaying {} clicks.", g_inputs.size()), NotificationIcon::Info);
+            } else {
+                g_inputs.clear();   // hand-played run: record fresh clicks
+                g_inputs.reserve(1024);
+            }
         }
     }
 
     void onStopPlaytest() {
         LevelEditorLayer::onStopPlaytest();
+        g_sessionActive = false;
+        g_botActive = false;
         if (g_recording) {
             g_recording = false;
             if (g_samples.size() >= 2) {
@@ -129,6 +169,33 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
 // tests against hazards - including the sharp corner of every wave click.
 // ---------------------------------------------------------------------------
 class $modify(PBGameLayer, GJBaseGameLayer) {
+    // GD applies queued clicks here, once per physics step. The bot presses at the
+    // same point, so the replay is step-for-step identical to the recorded run.
+    void processQueuedButtons(float dt, bool clearInputQueue) {
+        if (g_sessionActive && editorPlaying(this)) {
+            if (!g_stepBaseSet) {
+                g_stepBase = m_currentStep;
+                g_stepBaseSet = true;
+            }
+            if (g_botActive && m_player1 && !m_player1->m_isDead) {
+                int step = m_currentStep - g_stepBase;
+                while (g_botIndex < g_inputs.size() && g_inputs[g_botIndex].step <= step) {
+                    auto const& e = g_inputs[g_botIndex++];
+                    g_injecting = true;
+                    this->handleButton(e.down, static_cast<int>(PlayerButton::Jump), true);
+                    g_injecting = false;
+                }
+            }
+        }
+        GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+    }
+
+    // While the bot plays, ignore the player's own taps.
+    void handleButton(bool down, int button, bool isPlayer1) {
+        if (g_botActive && !g_injecting && editorPlaying(this)) return;
+        GJBaseGameLayer::handleButton(down, button, isPlayer1);
+    }
+
     int checkCollisions(PlayerObject* player, float dt, bool ignoreDamage) {
         recordStep(player);
         return GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
@@ -171,7 +238,7 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
 };
 
 // ---------------------------------------------------------------------------
-// Editor buttons: AUTO (generate) and SET (settings)
+// Editor buttons: AUTO (generate), SET (settings), BOT (playtest replay)
 // ---------------------------------------------------------------------------
 class $modify(PBEditorUI, EditorUI) {
     bool init(LevelEditorLayer* editorLayer) {
@@ -193,6 +260,20 @@ class $modify(PBEditorUI, EditorUI) {
         auto setBtn = makeBtn("SET", CircleBaseColor::Gray, menu_selector(PBEditorUI::onPathSettings));
         setBtn->setID("settings-button"_spr);
 
+        auto makeSpr = [](char const* text, CircleBaseColor color) {
+            auto label = CCLabelBMFont::create(text, "bigFont.fnt");
+            label->setScale(0.45f);
+            auto spr = CircleButtonSprite::create(label, color, CircleBaseSize::Small);
+            spr->setScale(0.8f);
+            return spr;
+        };
+        auto botBtn = CCMenuItemToggler::create(
+            makeSpr("BOT", CircleBaseColor::Gray), makeSpr("BOT", CircleBaseColor::Cyan),
+            this, menu_selector(PBEditorUI::onPathBot)
+        );
+        botBtn->toggle(g_botEnabled);
+        botBtn->setID("bot-button"_spr);
+
         // Place the buttons just below the playtest buttons (left side of the editor).
         auto winSize = CCDirector::get()->getWinSize();
         CCPoint base = {12.f, winSize.height * 0.55f};
@@ -200,12 +281,28 @@ class $modify(PBEditorUI, EditorUI) {
             base = CCPoint(playtestMenu->getPositionX(), playtestMenu->boundingBox().getMinY() - 4.f);
         }
         menu->setPosition(base);
+        // Stacked vertically: AUTO, SET, BOT
         autoBtn->setPosition({18.f, -18.f});
-        setBtn->setPosition({56.f, -18.f});
+        setBtn->setPosition({18.f, -56.f});
+        botBtn->setPosition({18.f, -94.f});
         menu->addChild(autoBtn);
         menu->addChild(setBtn);
+        menu->addChild(botBtn);
         this->addChild(menu, 10);
         return true;
+    }
+
+    void onPathBot(CCObject* sender) {
+        // The toggler flips its state after this callback, so the new state is the opposite.
+        bool on = !static_cast<CCMenuItemToggler*>(sender)->isToggled();
+        g_botEnabled = on;
+        if (!on) {
+            notify("Bot OFF - your own taps are recorded.", NotificationIcon::Info);
+        } else if (g_inputs.empty()) {
+            notify("Bot ON - play once yourself first so it has clicks to copy.", NotificationIcon::Warning);
+        } else {
+            notify(fmt::format("Bot ON - next playtest replays {} clicks.", g_inputs.size()), NotificationIcon::Success);
+        }
     }
 
     void onPathSettings(CCObject*) {
