@@ -62,6 +62,7 @@ namespace {
     int g_variantPos = -1;                 // -1 = baseline run (unchanged clicks)
     pb::Macro g_checkMacro;
     bool g_testDone = false;
+    bool g_userStopped = false;            // player tapped the playtest STOP button
     bool g_testSurvived = false;
     struct VariantResult { int index; int delta; bool survived; };
     std::vector<VariantResult> g_results;
@@ -268,13 +269,14 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
 
     void onStopPlaytest() {
         bool wasHandRun = g_s.where == Where::Editor && g_s.recordInputs;
-        // A check run stopped from outside: if the player had died (GD stopping the
-        // playtest itself), count it as a death and carry on; otherwise the player
-        // pressed stop -> cancel the check.
+        // A check run stopped from outside. In the editor GD stops the playtest itself,
+        // right inside the collision check, when the player dies - so any stop we did
+        // not start is a death, unless the player tapped the STOP button.
         bool checkRunOpen = g_checking && !g_testDone;
-        bool diedInRun = checkRunOpen && g_s.dead;
+        bool userStopped = g_userStopped;
+        g_userStopped = false;
         LevelEditorLayer::onStopPlaytest();
-        if (checkRunOpen && diedInRun) {
+        if (checkRunOpen && !userStopped) {
             g_testDone = true;
             g_testSurvived = false;
             Loader::get()->queueInMainThread([] { finishCheckTest(); });
@@ -526,6 +528,11 @@ class $modify(PBEditorUI, EditorUI) {
         return true;
     }
 
+    void onStopPlaytest(CCObject* sender) {
+        if (sender && g_checking) g_userStopped = true;
+        EditorUI::onStopPlaytest(sender);
+    }
+
     void onPathBot(CCObject* sender) {
         bool on = !static_cast<CCMenuItemToggler*>(sender)->isToggled();
         g_botEnabled = on;
@@ -680,7 +687,7 @@ class $modify(PBEditorUI, EditorUI) {
             }
         }
         std::string text = fmt::format(
-            "<cg>{}</c> / {} clicks are 240 TPS frame perfect\n(moving them 1 physics step earlier or later kills you).",
+            "<cg>{}</c> / {} clicks are frame perfect\n(moving them 1 physics step earlier or later kills you).",
             perfect, in.size());
         if (!list.empty()) text += "\n\nNot frame perfect:" + list;
         if (hidden > 0) text += fmt::format("\n...and {} more", hidden);

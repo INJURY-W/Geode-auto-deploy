@@ -5,8 +5,8 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.7.0",
-	"developer": "heum",
+	"version": "v1.7.1",
+	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
 		"geode.node-ids": ">=v1.23.3"
