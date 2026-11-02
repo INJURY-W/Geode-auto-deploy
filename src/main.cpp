@@ -55,6 +55,10 @@ namespace {
     };
     Session g_s;
     bool g_injecting = false;
+    // Dual mode timing: physics-step collision checks done this session per player,
+    // and player-2 clicks waiting until player 2 has finished the current step.
+    int g_c1 = 0, g_c2 = 0;
+    std::vector<bool> g_p2Pending;
 
     // --- real-play bot / safe mode ---
     pb::Macro g_playMacro;
@@ -148,9 +152,30 @@ namespace {
             g_injecting = false;
         };
         bool dual = dualActive(l);
-        if (p2) { if (dual) press(l->m_player2); return; }
+        // Clicks are injected right after player 1's step. If player 2 hasn't run
+        // this step yet, giving it the click now would put it one step early compared
+        // to a real tap (which lands before the whole step) - so hold it back until
+        // player 2 has finished this step too.
+        auto pressP2 = [&] {
+            if (g_c2 >= g_c1) press(l->m_player2);
+            else g_p2Pending.push_back(down);
+        };
+        if (p2) { if (dual) pressP2(); return; }
         press(l->m_player1);
-        if (dual && !twoPlayerLevel(l)) press(l->m_player2);
+        if (dual && !twoPlayerLevel(l)) pressP2();
+    }
+
+    void flushP2(GJBaseGameLayer* l) {
+        if (g_p2Pending.empty()) return;
+        auto pending = std::move(g_p2Pending);
+        g_p2Pending.clear();
+        auto p = l ? l->m_player2 : nullptr;
+        if (!p || p->m_isDead) return;
+        for (bool down : pending) {
+            g_injecting = true;
+            if (down) p->pushButton(PlayerButton::Jump); else p->releaseButton(PlayerButton::Jump);
+            g_injecting = false;
+        }
     }
 
     void endSession() { g_s = Session{}; }
@@ -176,6 +201,8 @@ namespace {
         g_pressedThisFrame = false;
         g_holding2 = false;
         g_pressedThisFrame2 = false;
+        g_c1 = g_c2 = 0;
+        g_p2Pending.clear();
         // Clicks made before the first physics step.
         if (g_s.botActive) botFire(layer->m_player1, 0);
     }
@@ -521,7 +548,13 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
             }
         }
 
+        if (g_s.where != Where::None && g_s.layer == this && player && player == this->m_player2 &&
+            player != this->m_player1 && sessionLayerAlive()) {
+            g_c2++;
+            flushP2(this);   // player 2 is done with this step: its held-back clicks go in now
+        }
         if (g_s.where != Where::None && g_s.layer == this && player == this->m_player1 && sessionLayerAlive()) {
+            g_c1++;
             onStep(player);
 
             if (g_simming && g_s.where == Where::Editor && !g_simDone) {
