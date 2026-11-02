@@ -65,6 +65,8 @@ namespace {
     bool g_testDone = false;
     bool g_userStopped = false;            // player tapped the playtest STOP button
     int g_checkSpeed = 1;                  // simulated frames per real frame while checking
+    double g_recDtSum = 0.0;               // frame times of the hand-played run
+    int g_recFrames = 0;
     bool g_testSurvived = false;
     struct VariantResult { int index; int delta; bool survived; };
     std::vector<VariantResult> g_results;
@@ -266,6 +268,8 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             startSession(Where::Editor, this, true, &g_macro, false);
         } else {
             g_recMacro.clear();
+            g_recDtSum = 0.0;
+            g_recFrames = 0;
             startSession(Where::Editor, this, false, nullptr, true);
         }
     }
@@ -297,6 +301,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             while (in.size() > 1 && !in.back().down && in.back().x < 1.f && in[in.size() - 2].x > 30.f) in.pop_back();
         }
         if (wasHandRun && !g_recMacro.empty()) {
+            if (g_recFrames > 0) g_recMacro.frameDt = static_cast<float>(g_recDtSum / g_recFrames);
             g_macro = g_recMacro;
             if (!g_macroKey.empty()) g_macro.save(macroPath(g_macroKey));
         }
@@ -323,8 +328,16 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         auto lel = LevelEditorLayer::get();
         bool checkRun = g_checking && lel && static_cast<GJBaseGameLayer*>(lel) == this &&
                         lel->m_playbackMode == PlaybackMode::Playing;
-        if (!checkRun) { GJBaseGameLayer::update(dt); return; }
-        constexpr float kFrame = 1.f / 120.f;
+        if (!checkRun) {
+            if (g_s.where == Where::Editor && g_s.recordInputs && g_s.layer == this && dt > 0.f) {
+                g_recDtSum += dt;
+                g_recFrames++;
+            }
+            GJBaseGameLayer::update(dt);
+            return;
+        }
+        // Same frame rate as the run was recorded at (falls back to the live one).
+        float kFrame = g_macro.frameDt > 0.f ? g_macro.frameDt : dt;
         for (int i = 0; i < g_checkSpeed; i++) {
             if (!g_checking || g_testDone || lel->m_playbackMode != PlaybackMode::Playing) break;
             GJBaseGameLayer::update(kFrame);
@@ -704,8 +717,9 @@ class $modify(PBEditorUI, EditorUI) {
                                 earlyOk[i] && lateOk[i] ? "early & late OK" : earlyOk[i] ? "early OK" : "late OK");
         }
         std::string text = fmt::format(
-            "# {} / {} frame perfect\n\nMoving a frame-perfect click 1 physics step earlier or later kills you.\n\n",
-            perfect, in.size());
+            "# {} / {} frame perfect\n\nMoving a frame-perfect click 1 physics step earlier or later kills you.\n\n"
+            "Checked at **{} fps** (the frame rate the clicks were recorded at).\n\n",
+            perfect, in.size(), g_macro.frameDt > 0.f ? static_cast<int>(std::lround(1.f / g_macro.frameDt)) : 0);
         if (!list.empty()) text += "## Not frame perfect\n\n" + list;
         MDPopup::create("Frame Perfect Check", text, "OK")->show();
     }

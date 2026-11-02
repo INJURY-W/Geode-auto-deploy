@@ -19,6 +19,7 @@ struct Macro {
     float x0 = 0.f;    // player x after the first physics step (used to line up replays)
     bool hasX0 = false;
     int endStep = 0;   // last physics step of the recorded run
+    float frameDt = 0.f; // average frame time of the recorded run (0 = unknown)
 
     bool empty() const { return inputs.empty(); }
     void clear() { *this = Macro{}; }
