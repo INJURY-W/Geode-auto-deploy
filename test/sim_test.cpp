@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
         y += dir * speed * dt;
         if (y > 260 || y < 140) dir = -dir;
         push(Mode::Wave, false, dir > 0);
-        x += speed * dt;
+        x += (x > x0 + 450 ? speed * 1.6f : speed) * dt;   // speed portal halfway
     }
     // Ball: roll, flip to a 6-block-high ceiling, flip back.
     x0 = x; y = 105.f; vy = 0; float gdir = -1; bool up = false;

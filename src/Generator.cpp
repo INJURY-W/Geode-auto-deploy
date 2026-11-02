@@ -121,6 +121,31 @@ public:
             float x0 = std::min(a.x, m_samples[j].x) - hw, x1 = std::max(a.x, m_samples[j].x) + hw;
             for (int c = cellOf(x0); c <= cellOf(x1); c++) m_segColumns[c].push_back(i);
         }
+        markTransitions();
+    }
+
+    // Around portals and other mid-step changes (speed, gamemode, gravity, size,
+    // ground push-out) GD may test positions between two recorded steps, so the
+    // tight placement keeps clear of the whole straight path between them there.
+    void markTransitions() {
+        size_t n = m_samples.size();
+        m_continuous.assign(n, false);
+        auto stepDx = [&](size_t i) { return m_samples[i + 1].x - m_samples[i].x; };
+        for (size_t i = 0; i + 1 < n; i++) {
+            auto const& a = m_samples[i];
+            auto const& b = m_samples[i + 1];
+            bool change = a.mode != b.mode || a.upsideDown != b.upsideDown ||
+                          std::fabs(a.halfW - b.halfW) > 0.01f || std::fabs(a.halfH - b.halfH) > 0.01f ||
+                          a.onGround != b.onGround;
+            if (!change && i > 0) {
+                float d0 = stepDx(i - 1), d1 = stepDx(i);
+                if (std::fabs(d1 - d0) > 0.02f + 0.02f * std::fabs(d0)) change = true;  // speed change
+            }
+            if (!change) continue;
+            size_t lo = i >= kTransitionSteps ? i - kTransitionSteps : 0;
+            size_t hi = std::min(n - 1, i + kTransitionSteps);
+            for (size_t k = lo; k <= hi; k++) m_continuous[k] = true;
+        }
     }
 
     // True if `area` (grown by `pad`) touches the player at any recorded frame.
@@ -383,11 +408,37 @@ public:
             for (size_t i : it->second) {
                 if (!seen.insert(i).second) continue;
                 auto pr = playerRect(m_samples[i]);
-                if (pr.r < l || pr.l > r) continue;   // touching counts, like GD
-                hi = std::max(hi, pr.t);
-                lo = std::min(lo, pr.b);
+                if (!(pr.r < l || pr.l > r)) {           // touching counts, like GD
+                    hi = std::max(hi, pr.t);
+                    lo = std::min(lo, pr.b);
+                }
+                if (i < m_continuous.size() && m_continuous[i]) chordExtremes(i, l, r, lo, hi);
             }
         }
+    }
+
+    // Extremes over the straight path from step i to step i+1 (used near transitions).
+    void chordExtremes(size_t i, float l, float r, float& lo, float& hi) const {
+        if (i + 1 >= m_samples.size()) return;
+        auto const& a = m_samples[i];
+        auto const& b = m_samples[i + 1];
+        if (std::fabs(b.x - a.x) > 60.f || std::fabs(b.y - a.y) > 60.f) return;  // teleport
+        float hw = std::max(a.halfW, b.halfW), hh = std::max(a.halfH, b.halfH);
+        float xa = l - hw, xb = r + hw;
+        float dx = b.x - a.x;
+        float t0, t1;
+        if (std::fabs(dx) < 1e-6f) {
+            if (a.x < xa || a.x > xb) return;
+            t0 = 0.f; t1 = 1.f;
+        } else {
+            float ta = (xa - a.x) / dx, tb = (xb - a.x) / dx;
+            t0 = std::max(0.f, std::min(ta, tb));
+            t1 = std::min(1.f, std::max(ta, tb));
+            if (t0 > t1) return;
+        }
+        float y0 = a.y + (b.y - a.y) * t0, y1 = a.y + (b.y - a.y) * t1;
+        hi = std::max(hi, std::max(y0, y1) + hh);
+        lo = std::min(lo, std::min(y0, y1) - hh);
     }
 
     bool placeFreeSpike(float x, float y, bool ceiling) {
@@ -422,6 +473,8 @@ private:
     std::vector<Sample> m_dense;
     std::unordered_map<int, std::vector<size_t>> m_columns;
     std::unordered_map<int, std::vector<size_t>> m_segColumns;
+    std::vector<bool> m_continuous;               // segment i -> i+1 checked as a line
+    static constexpr size_t kTransitionSteps = 8;
     std::unordered_set<int64_t> m_occupied;
     std::unordered_set<int64_t> m_ourBlocks;
     std::vector<Placement> m_out;
