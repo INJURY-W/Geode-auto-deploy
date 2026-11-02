@@ -190,7 +190,6 @@ namespace {
         st.style = style == "dense" ? pb::Style::Dense
                  : style == "blocks-only" ? pb::Style::BlocksOnly
                  : style == "tight" ? pb::Style::Tight
-                 : style == "attach" ? pb::Style::Attach
                  : pb::Style::Basic;
         st.cube = mod->getSettingValue<bool>("mode-cube");
         st.ship = mod->getSettingValue<bool>("mode-ship");
@@ -798,16 +797,23 @@ class $modify(PBEditorUI, EditorUI) {
                 auto probe = GameObject::createWithKey(id);
                 if (!probe) continue;
                 float r = probe->getObjectRadius();
+                if (!(r > 0.5f && r < 200.f)) r = probe->m_objectRadius;
+                if (!(r > 0.5f && r < 200.f)) {
+                    // Radius not readable: use half the sprite size. That is at least as
+                    // big as the real round hitbox, so the saw stays safe (just less tight).
+                    auto sz = probe->getContentSize();
+                    r = std::max(sz.width, sz.height) * 0.5f;
+                }
                 if (r > 0.5f && r < 200.f) settings.saws.push_back({id, r});
             }
             if (settings.saws.empty()) {
-                notify("No saw with a round hitbox in Saw Object IDs - using spikes only.", NotificationIcon::Warning);
+                notify("Saw Object IDs: none of these objects could be created - using spikes only.", NotificationIcon::Warning);
             }
         }
 
-        // Attach style: the player's own solid blocks are the structures to stick spikes on.
+        // Tight style: the player's own solid blocks - hazards never go inside them.
         std::vector<pb::SolidRect> solids;
-        if (settings.style == pb::Style::Attach) {
+        if (settings.style == pb::Style::Tight) {
             if (auto objs = m_editorLayer->m_objects) {
                 for (auto obj : CCArrayExt<GameObject*>(objs)) {
                     if (obj->m_objectType != GameObjectType::Solid) continue;
@@ -822,6 +828,15 @@ class $modify(PBEditorUI, EditorUI) {
         if (placements.empty()) {
             notify("Nothing to place (check the mode toggles in SET).", NotificationIcon::Info);
             return;
+        }
+
+        if (settings.style == pb::Style::Tight && !settings.saws.empty()) {
+            int sawCount = 0;
+            for (auto const& p : placements) if (p.radius > 0.f) sawCount++;
+            if (sawCount == 0) {
+                notify(fmt::format("No saw fit next to the path (saw radius {:.0f}). Try a lower Min Size.",
+                                   settings.saws.front().radius), NotificationIcon::Warning);
+            }
         }
 
         auto created = CCArray::create();

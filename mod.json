@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.10.0",
+	"version": "v1.11.0",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -15,14 +15,13 @@
 		"style": {
 			"type": "string",
 			"name": "Placement Style",
-			"description": "<cy>basic</c>: floor/ceiling blocks + a few spikes under each jump.\n<cy>dense</c>: fill every safe spot with spikes and use tighter corridors.\n<cy>blocks-only</c>: no spikes at all.\n<cy>tight</c>: spikes only, placed off-grid right against your real hitbox (pixel-close). Gap and spacing are set in pixels below.\n<cy>attach</c>: you build the structures, it sticks spikes onto them - on top of the blocks under the path and under the blocks above it - sizing each spike (Min/Max Size) so its hitbox ends exactly Tight Gap from your path.",
+			"description": "<cy>basic</c>: floor/ceiling blocks + a few spikes under each jump.\n<cy>dense</c>: fill every safe spot with spikes and use tighter corridors.\n<cy>blocks-only</c>: no spikes at all.\n<cy>tight</c>: spikes (and saws) placed off-grid right against your real hitbox for every gamemode, cube included. Your own blocks are kept clear. Gap and spacing are set in pixels below.",
 			"default": "basic",
 			"one-of": [
 				"basic",
 				"dense",
 				"blocks-only",
-				"tight",
-				"attach"
+				"tight"
 			]
 		},
 		"mode-cube": {
@@ -86,7 +85,7 @@
 		"tight-gap": {
 			"type": "float",
 			"name": "Tight Gap (px)",
-			"description": "Tight/attach styles. Gap between your hitbox and each spike hitbox in free-move pixels (30 px = 1 block). 0 = touching, 1 = one pixel.",
+			"description": "Tight style only. Gap between your hitbox and each spike hitbox in free-move pixels (30 px = 1 block). 0 = touching, 1 = one pixel.",
 			"default": 1.0,
 			"min": 0.0,
 			"max": 30.0,
@@ -102,7 +101,7 @@
 		"portal-gap": {
 			"type": "float",
 			"name": "Portal Gap (px)",
-			"description": "Tight/attach styles. Gap used instead of Tight Gap right around portals, speed portals, pads, gravity and size changes, where GD's timing inside a physics step can differ slightly. Elsewhere Tight Gap is used. If this is smaller than Tight Gap, Tight Gap is used everywhere.",
+			"description": "Tight style only. Gap used instead of Tight Gap right around portals, speed portals, pads, gravity and size changes, where GD's timing inside a physics step can differ slightly. Elsewhere Tight Gap is used. If this is smaller than Tight Gap, Tight Gap is used everywhere.",
 			"default": 1.0,
 			"min": 0.0,
 			"max": 30.0,
@@ -118,7 +117,7 @@
 		"tight-spacing": {
 			"type": "float",
 			"name": "Tight Spike Spacing (px)",
-			"description": "Tight/attach styles. Horizontal distance between spikes in free-move pixels (30 px = 1 block). Lower = more spikes.",
+			"description": "Tight style only. Horizontal distance between spikes in free-move pixels (30 px = 1 block). Lower = more spikes.",
 			"default": 15.0,
 			"min": 3.0,
 			"max": 90.0,
@@ -152,7 +151,7 @@
 		"size-min": {
 			"type": "float",
 			"name": "Min Size",
-			"description": "Tight/attach styles. Smallest random scale for spikes and saws (1 = normal).",
+			"description": "Tight style only. Smallest random scale for spikes and saws (1 = normal).",
 			"default": 0.7,
 			"min": 0.2,
 			"max": 3.0,
@@ -166,7 +165,7 @@
 		"size-max": {
 			"type": "float",
 			"name": "Max Size",
-			"description": "Tight/attach styles. Largest random scale for spikes and saws (1 = normal). Set both to 1 for normal sizes.",
+			"description": "Tight style only. Largest random scale for spikes and saws (1 = normal). Set both to 1 for normal sizes.",
 			"default": 1.3,
 			"min": 0.2,
 			"max": 3.0,
