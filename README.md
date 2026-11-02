@@ -21,11 +21,12 @@
 
 ## 설정 (SET)
 - **Placement Style**: `basic`(기본) / `dense`(가시 빽빽, 통로 좁게) / `blocks-only`(가시 없음) / `tight`(가시만, 격자 무시하고 실제 히트박스에 픽셀 단위로 붙임)
-- **Spike Spacing (tight)**: tight에서 가시 사이 가로 간격 (작을수록 촘촘)
 - **게임모드별 켜기/끄기**: Cube, Ship, Wave, Ball, UFO
 - **Spikes per Jump**: basic에서 점프당 최대 가시 수
-- **Spike Clearance**: 가시와 플레이어 사이 여유 거리 (30 = 1칸)
-- **Ship/UFO, Wave Corridor Margin**: 통로 위아래 여유 공간
+- **Spike Clearance (blocks)**: basic/dense에서 가시와 플레이어 사이 여유 (칸 단위, 1 = 1격자)
+- **Tight Gap (px)**: tight에서 가시와 플레이어 히트박스 사이 간격 (프리무브 픽셀 단위, 30px = 1칸, 0 = 맞닿음)
+- **Tight Spike Spacing (px)**: tight에서 가시 사이 가로 간격 (픽셀 단위, 작을수록 촘촘)
+- **Ship/UFO, Wave Corridor Margin (blocks)**: 통로 위아래 여유 (칸 단위)
 - **Block / Spike Object ID**: 사용할 오브젝트 ID (기본 1 / 8)
 
 ## 빌드 방법 (.geode 파일 만들기)

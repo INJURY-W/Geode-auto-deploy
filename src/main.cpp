@@ -50,10 +50,15 @@ namespace {
         st.ball = mod->getSettingValue<bool>("mode-ball");
         st.ufo = mod->getSettingValue<bool>("mode-ufo");
         st.maxSpikes = static_cast<int>(mod->getSettingValue<int64_t>("max-spikes"));
-        st.spikeClearance = static_cast<float>(mod->getSettingValue<double>("spike-clearance"));
-        st.spikeSpacing = static_cast<float>(mod->getSettingValue<double>("spike-spacing"));
-        st.shipMargin = static_cast<float>(mod->getSettingValue<double>("ship-margin"));
-        st.waveMargin = static_cast<float>(mod->getSettingValue<double>("wave-margin"));
+        // Distances: blocks (1 = 1 grid cell = 30 units) or free-move pixels (1 px = 1 unit).
+        constexpr float kBlock = 30.f;
+        auto blocks = [&](char const* k) { return static_cast<float>(mod->getSettingValue<double>(k)) * kBlock; };
+        auto pixels = [&](char const* k) { return static_cast<float>(mod->getSettingValue<double>(k)); };
+        st.spikeClearance = blocks("clearance-blocks");
+        st.shipMargin = blocks("ship-margin-blocks");
+        st.waveMargin = blocks("wave-margin-blocks");
+        st.tightGap = pixels("tight-gap");
+        st.spikeSpacing = pixels("tight-spacing");
         st.blockID = static_cast<int>(mod->getSettingValue<int64_t>("block-id"));
         st.spikeID = static_cast<int>(mod->getSettingValue<int64_t>("spike-id"));
         return st;

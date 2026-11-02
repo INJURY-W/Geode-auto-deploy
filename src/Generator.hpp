@@ -31,7 +31,8 @@ struct Settings {
     float spikeClearance = 4.f;
     float shipMargin = 30.f;
     float waveMargin = 12.f;
-    float spikeSpacing = 30.f;  // tight style: horizontal distance between spikes
+    float spikeSpacing = 15.f;  // tight style: horizontal distance between spikes (units)
+    float tightGap = 1.f;       // tight style: gap between player and spike hitboxes (units)
     int blockID = 1;
     int spikeID = 8;
 };

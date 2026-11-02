@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.1.0",
+	"version": "v1.2.0",
 	"developer": "heum",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -15,7 +15,7 @@
 		"style": {
 			"type": "string",
 			"name": "Placement Style",
-			"description": "<cy>basic</c>: floor/ceiling blocks + a few spikes under each jump.\n<cy>dense</c>: fill every safe spot with spikes and use tighter corridors.\n<cy>blocks-only</c>: no spikes at all.\n<cy>tight</c>: spikes only, placed off-grid right against your real hitbox (pixel-close). Use with low Spike Clearance.",
+			"description": "<cy>basic</c>: floor/ceiling blocks + a few spikes under each jump.\n<cy>dense</c>: fill every safe spot with spikes and use tighter corridors.\n<cy>blocks-only</c>: no spikes at all.\n<cy>tight</c>: spikes only, placed off-grid right against your real hitbox (pixel-close). Gap and spacing are set in pixels below.",
 			"default": "basic",
 			"one-of": [
 				"basic",
@@ -66,51 +66,83 @@
 				"input": true
 			}
 		},
-		"spike-clearance": {
+		"clearance-blocks": {
 			"type": "float",
-			"name": "Spike Clearance",
-			"description": "Extra safe distance (units, 30 = 1 block) between the player hitbox and spike hitboxes. For tight style, 1 is very tight; 0 touches the edge.",
-			"default": 4.0,
+			"name": "Spike Clearance (blocks)",
+			"description": "Safe gap between your hitbox and spike hitboxes for basic/dense, in grid blocks (1 = 1 block).",
+			"default": 0.15,
+			"min": 0.0,
+			"max": 1.0,
+			"control": {
+				"arrow-step": 0.05,
+				"big-arrows": true,
+				"big-arrow-step": 0.25,
+				"slider": true,
+				"slider-step": 0.05,
+				"input": true
+			}
+		},
+		"tight-gap": {
+			"type": "float",
+			"name": "Tight Gap (px)",
+			"description": "Tight style only. Gap between your hitbox and each spike hitbox in free-move pixels (30 px = 1 block). 0 = touching, 1 = one pixel.",
+			"default": 1.0,
 			"min": 0.0,
 			"max": 30.0,
 			"control": {
+				"arrow-step": 0.5,
+				"big-arrows": true,
+				"big-arrow-step": 5.0,
 				"slider": true,
+				"slider-step": 0.5,
 				"input": true
 			}
 		},
-		"spike-spacing": {
+		"tight-spacing": {
 			"type": "float",
-			"name": "Spike Spacing (tight)",
-			"description": "Horizontal distance between spikes in tight style (units, 30 = 1 block). Lower = more spikes.",
+			"name": "Tight Spike Spacing (px)",
+			"description": "Tight style only. Horizontal distance between spikes in free-move pixels (30 px = 1 block). Lower = more spikes.",
 			"default": 15.0,
 			"min": 3.0,
-			"max": 60.0,
-			"control": {
-				"slider": true,
-				"input": true
-			}
-		},
-		"ship-margin": {
-			"type": "float",
-			"name": "Ship/UFO Corridor Margin",
-			"description": "Free space (units) kept above and below the ship/UFO path.",
-			"default": 30.0,
-			"min": 0.0,
-			"max": 120.0,
-			"control": {
-				"slider": true,
-				"input": true
-			}
-		},
-		"wave-margin": {
-			"type": "float",
-			"name": "Wave Corridor Margin",
-			"description": "Free space (units) kept above and below the wave path.",
-			"default": 12.0,
-			"min": 0.0,
 			"max": 90.0,
 			"control": {
+				"arrow-step": 1.0,
+				"big-arrows": true,
+				"big-arrow-step": 5.0,
 				"slider": true,
+				"slider-step": 1.0,
+				"input": true
+			}
+		},
+		"ship-margin-blocks": {
+			"type": "float",
+			"name": "Ship/UFO Corridor Margin (blocks)",
+			"description": "Free space above and below the ship/UFO path, in grid blocks (1 = 1 block).",
+			"default": 1.0,
+			"min": 0.0,
+			"max": 4.0,
+			"control": {
+				"arrow-step": 0.1,
+				"big-arrows": true,
+				"big-arrow-step": 0.5,
+				"slider": true,
+				"slider-step": 0.1,
+				"input": true
+			}
+		},
+		"wave-margin-blocks": {
+			"type": "float",
+			"name": "Wave Corridor Margin (blocks)",
+			"description": "Free space above and below the wave path, in grid blocks (1 = 1 block).",
+			"default": 0.4,
+			"min": 0.0,
+			"max": 3.0,
+			"control": {
+				"arrow-step": 0.1,
+				"big-arrows": true,
+				"big-arrow-step": 0.5,
+				"slider": true,
+				"slider-step": 0.1,
 				"input": true
 			}
 		},

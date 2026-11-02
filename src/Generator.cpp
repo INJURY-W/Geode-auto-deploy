@@ -323,7 +323,7 @@ public:
     // Tight style: rows of spikes above and below every ship/wave/UFO part,
     // each one pushed right up against the closest the player ever gets.
     void tightCorridors() {
-        float c = m_st.spikeClearance;
+        float c = m_st.tightGap;
         float step = std::max(3.f, m_st.spikeSpacing);
         size_t n = m_samples.size();
         size_t i = 0;
@@ -361,7 +361,7 @@ public:
 
     bool placeFreeSpike(float x, float y, bool ceiling) {
         if (m_occupied.count(key(cellOf(x), cellOf(y)))) return false;   // existing object here
-        if (hitsPath(freeSpikeRect(x, y), std::max(0.f, m_st.spikeClearance - 0.25f))) return false;
+        if (hitsPath(freeSpikeRect(x, y), std::max(0.f, m_st.tightGap - 0.25f))) return false;
         m_out.push_back({m_st.spikeID, x, y, ceiling ? 180.f : 0.f, true});
         return true;
     }

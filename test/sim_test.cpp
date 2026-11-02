@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
     Settings st;
     if (style == "dense") st.style = Style::Dense;
     if (style == "blocks") st.style = Style::BlocksOnly;
-    if (style == "tight") { st.style = Style::Tight; st.spikeClearance = 1.f; st.spikeSpacing = 15.f; }
+    if (style == "tight") { st.style = Style::Tight; st.tightGap = 1.f; st.spikeSpacing = 15.f; }
     auto out = generate(path, st, {});
 
     // Safety check: no block cell or spike hazard may overlap the player at any frame.
