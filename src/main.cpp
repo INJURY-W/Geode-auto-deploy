@@ -10,6 +10,8 @@
 #include <Geode/ui/MDPopup.hpp>
 
 #include <cmath>
+#include <random>
+#include <sstream>
 
 #include "Generator.hpp"
 #include "Macro.hpp"
@@ -206,6 +208,10 @@ namespace {
         st.spikeSpacing = pixels("tight-spacing");
         st.blockID = static_cast<int>(mod->getSettingValue<int64_t>("block-id"));
         st.spikeID = static_cast<int>(mod->getSettingValue<int64_t>("spike-id"));
+        st.sawChance = static_cast<float>(mod->getSettingValue<int64_t>("saw-chance")) / 100.f;
+        st.sizeMin = static_cast<float>(mod->getSettingValue<double>("size-min"));
+        st.sizeMax = static_cast<float>(mod->getSettingValue<double>("size-max"));
+        st.seed = std::random_device{}();
         return st;
     }
 
@@ -781,6 +787,23 @@ class $modify(PBEditorUI, EditorUI) {
             }
         }
 
+        // Saws: read each one's round hazard radius from the game.
+        if (settings.style == pb::Style::Tight && settings.sawChance > 0.f) {
+            std::stringstream ids(Mod::get()->getSettingValue<std::string>("saw-ids"));
+            std::string tok;
+            while (std::getline(ids, tok, ',')) {
+                int id = std::atoi(tok.c_str());
+                if (id <= 0) continue;
+                auto probe = GameObject::createWithKey(id);
+                if (!probe) continue;
+                float r = probe->getObjectRadius();
+                if (r > 0.5f && r < 200.f) settings.saws.push_back({id, r});
+            }
+            if (settings.saws.empty()) {
+                notify("No saw with a round hitbox in Saw Object IDs - using spikes only.", NotificationIcon::Warning);
+            }
+        }
+
         auto placements = pb::generate(g_samples, settings, existing);
         if (placements.empty()) {
             notify("Nothing to place (check the mode toggles in SET).", NotificationIcon::Info);
@@ -793,6 +816,10 @@ class $modify(PBEditorUI, EditorUI) {
             auto obj = m_editorLayer->createObject(p.objectID, {p.x, p.y}, true);
             if (!obj) continue;
             if (p.rotation != 0.f) obj->setRotation(p.rotation);
+            if (std::fabs(p.scale - 1.f) > 0.001f) {
+                obj->updateCustomScaleX(p.scale);
+                obj->updateCustomScaleY(p.scale);
+            }
             created->addObject(obj);
             (p.isSpike ? spikes : blocks)++;
         }

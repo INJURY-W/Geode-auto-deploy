@@ -1,3 +1,4 @@
+#include <algorithm>
 // Host-side test: simulates a rough playtest path and checks the generator never
 // places anything that would touch the recorded player. Not part of the mod build.
 #include "../src/Generator.hpp"
@@ -74,7 +75,8 @@ int main(int argc, char** argv) {
     Settings st;
     if (style == "dense") st.style = Style::Dense;
     if (style == "blocks") st.style = Style::BlocksOnly;
-    if (style == "tight") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 15.f; }
+    if (style == "tight") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 15.f;
+        st.saws = {{88, 16.f}, {89, 10.f}}; st.sawChance = 0.3f; st.sizeMin = 0.6f; st.sizeMax = 1.4f; st.seed = 7; }
     auto out = generate(path, st, {});
 
     // Safety check: no block cell or spike hazard may overlap the player at any frame.
@@ -82,7 +84,7 @@ int main(int argc, char** argv) {
     for (auto const& p : out) {
         float l, b, r, t;
         if (!p.isSpike) { l = p.x - 15; r = p.x + 15; b = p.y - 15; t = p.y + 15; }
-        else { l = p.x - 3; r = p.x + 3; b = p.y - 6; t = p.y + 6; }
+        else { l = p.x - 3 * p.scale; r = p.x + 3 * p.scale; b = p.y - 6 * p.scale; t = p.y + 6 * p.scale; }
         // Spikes: checked at the recorded steps only (what GD tests). Blocks: also
         // between steps, since solids push the player around.
         bool hit = false;
@@ -96,7 +98,12 @@ int main(int argc, char** argv) {
                 // A step's own hitbox for spikes; the larger of the two between steps.
                 float hw = sub ? std::max(a.halfW, c.halfW) : c.halfW;
                 float hh = sub ? std::max(a.halfH, c.halfH) : c.halfH;
-                if (p.isSpike) {
+                if (p.radius > 0.f) {
+                    // Saw: circle vs player box, touching counts
+                    float dx = std::max({sx - hw - p.x, 0.f, p.x - (sx + hw)});
+                    float dy = std::max({sy - hh - p.y, 0.f, p.y - (sy + hh)});
+                    if (dx * dx + dy * dy <= p.radius * p.radius) hit = true;
+                } else if (p.isSpike) {
                     // Hazards: inclusive, like CCRect::intersectsRect (touching = death)
                     if (l <= sx + hw && sx - hw <= r && b <= sy + hh && sy - hh <= t) hit = true;
                 } else {
@@ -107,8 +114,14 @@ int main(int argc, char** argv) {
         }
         if (hit) bad++;
     }
-    int blocks = 0, spikes = 0;
-    for (auto const& p : out) (p.isSpike ? spikes : blocks)++;
+    int blocks = 0, spikes = 0, saws = 0;
+    float smin = 9.f, smax = 0.f;
+    for (auto const& p : out) {
+        (p.isSpike ? spikes : blocks)++;
+        if (p.radius > 0.f) saws++;
+        if (p.isSpike) { smin = std::min(smin, p.scale); smax = std::max(smax, p.scale); }
+    }
+    if (style == "tight") std::printf("tight: saws=%d scale=%.2f..%.2f\n", saws, smin, smax);
     std::printf("style=%s samples=%zu blocks=%d spikes=%d collisions=%d\n",
                 style.c_str(), path.size(), blocks, spikes, bad);
 

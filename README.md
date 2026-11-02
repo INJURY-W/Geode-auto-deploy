@@ -38,6 +38,9 @@ SET의 **Showcase Bot (real play)**를 켜면 레벨을 실제로 플레이할 �
 - **Spike Clearance (blocks)**: basic/dense에서 가시와 플레이어 사이 여유 (칸 단위, 1 = 1격자)
 - **Tight Gap (px)**: tight에서 가시와 플레이어 히트박스 사이 간격 (프리무브 픽셀 단위, 30px = 1칸, 0 = 맞닿음)
 - **Portal Gap (px)**: tight에서 포탈·속도 포탈·발판·중력/크기 변경 지점 앞뒤에만 쓰는 간격 (기본 1px). 나머지 구간은 Tight Gap
+- **Saw Chance (%)**: tight에서 가시 사이사이에 톱니가 섞이는 비율 (0 = 가시만)
+- **Saw Object IDs**: 랜덤으로 쓸 톱니 ID 목록 (기본 88,89,98). 원형 판정 크기는 게임에서 읽어옴
+- **Min / Max Size**: tight에서 가시·톱니 크기를 이 범위에서 랜덤으로 (둘 다 1이면 기본 크기)
 - **Tight Spike Spacing (px)**: tight에서 가시 사이 가로 간격 (픽셀 단위, 작을수록 촘촘)
 - **Ship/UFO, Wave Corridor Margin (blocks)**: 통로 위아래 여유 (칸 단위)
 - **Block / Spike Object ID**: 사용할 오브젝트 ID (기본 1 / 8)

@@ -38,6 +38,12 @@ struct Settings {
     // center relative to the object position when unrotated.
     float spikeHalfW = 3.f, spikeHalfH = 6.f;
     float spikeOffX = 0.f, spikeOffY = 0.f;
+    // Tight style mix: saws between the spikes, and random sizes for both.
+    struct SawDef { int id; float radius; };   // radius at scale 1 (read from the game)
+    std::vector<SawDef> saws;
+    float sawChance = 0.f;      // 0..1, share of tight slots that become a saw
+    float sizeMin = 1.f, sizeMax = 1.f;
+    uint32_t seed = 1;
     int blockID = 1;
     int spikeID = 8;
 };
@@ -47,7 +53,9 @@ struct Placement {
     float x = 0.f;          // object center
     float y = 0.f;
     float rotation = 0.f;   // 180 for ceiling spikes
-    bool isSpike = false;
+    bool isSpike = false;   // any hazard (spike or saw)
+    float scale = 1.f;      // object scale (1 = normal size)
+    float radius = 0.f;     // saws: hazard circle radius after scaling (0 = not a saw)
 };
 
 // Objects already in the level, used so we don't stack on top of them.

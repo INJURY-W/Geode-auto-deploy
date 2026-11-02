@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <random>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -359,8 +360,13 @@ public:
     // Tight style: rows of spikes above and below every ship/wave/UFO part,
     // each one pushed right up against the closest the player ever gets.
     void tightCorridors() {
-        float c = m_st.tightGap;
         float step = std::max(3.f, m_st.spikeSpacing);
+        std::mt19937 rng(m_st.seed);
+        std::uniform_real_distribution<float> u01(0.f, 1.f);
+        auto randScale = [&] {
+            float lo = std::min(m_st.sizeMin, m_st.sizeMax), hi = std::max(m_st.sizeMin, m_st.sizeMax);
+            return lo + (hi - lo) * u01(rng);
+        };
         size_t n = m_samples.size();
         size_t i = 0;
         while (i < n) {
@@ -373,23 +379,92 @@ public:
                 x1 = std::max(x1, m_samples[j].x);
                 j++;
             }
-            float hw = m_st.spikeHalfW, hh = m_st.spikeHalfH;
             for (float x = x0; x <= x1 + 0.01f; x += step) {
-                // Hitbox x-range is the same for both rows only if there's no x offset;
-                // use the wider span of the two to stay safe.
-                float ox = std::fabs(m_st.spikeOffX);
-                float lo = 1e9f, hi = -1e9f;
-                float l = x - ox - hw - c, r = x + ox + hw + c;
-                segmentExtremes(l, r, lo, hi);
-                if (hi < lo) continue;
-                // Ceiling spike (180): hitbox bottom sits exactly `c` above the path.
-                placeFreeSpike(x, hi + c + hh + m_st.spikeOffY, true);
-                // Floor spike: hitbox top sits exactly `c` below the path.
-                float fy = lo - c - hh - m_st.spikeOffY;
-                if (fy >= kGroundTop + 15.f) placeFreeSpike(x, fy, false);
+                for (bool ceiling : {true, false}) {
+                    float scale = randScale();
+                    bool saw = !m_st.saws.empty() && u01(rng) < m_st.sawChance;
+                    if (saw) {
+                        auto const& d = m_st.saws[rng() % m_st.saws.size()];
+                        placeSaw(x, d.id, d.radius * scale, scale, ceiling);
+                    } else {
+                        placeScaledSpike(x, scale, ceiling);
+                    }
+                }
             }
             i = j;
         }
+    }
+
+    // Spike (upright or hanging) pushed against the path at column x.
+    bool placeScaledSpike(float x, float scale, bool ceiling) {
+        float c = m_st.tightGap;
+        float hw = m_st.spikeHalfW * scale, hh = m_st.spikeHalfH * scale;
+        float ox = std::fabs(m_st.spikeOffX) * scale, oy = m_st.spikeOffY * scale;
+        float lo = 1e9f, hi = -1e9f;
+        segmentExtremes(x - ox - hw - c, x + ox + hw + c, lo, hi);
+        if (hi < lo) return false;
+        float y = ceiling ? hi + c + hh + oy : lo - c - hh - oy;
+        if (!ceiling && y < kGroundTop + 15.f * scale) return false;   // would sit in the ground
+        if (m_occupied.count(key(cellOf(x), cellOf(y)))) return false;
+        Placement p{m_st.spikeID, x, y, ceiling ? 180.f : 0.f, true};
+        p.scale = scale;
+        m_out.push_back(p);
+        return true;
+    }
+
+    // Saw (round hitbox of radius R) pushed against the path at column x: its center
+    // goes just far enough that the circle stays the gap away from every recorded step.
+    bool placeSaw(float x, int id, float R, float scale, bool ceiling) {
+        if (R <= 0.f) return false;
+        float c = m_st.tightGap;
+        bool any = false;
+        float need = ceiling ? -1e9f : 1e9f;
+        auto constrain = [&](Rect const& pr) {
+            float dx = std::max({pr.l - x, 0.f, x - pr.r});
+            if (dx >= R) return;
+            float h = std::sqrt(R * R - dx * dx);
+            any = true;
+            if (ceiling) need = std::max(need, pr.t + h);
+            else need = std::min(need, pr.b - h);
+        };
+        float reach = R + c + kPad;
+        std::unordered_set<size_t> seen;
+        for (int col = cellOf(x - reach); col <= cellOf(x + reach); col++) {
+            auto it = m_segColumns.find(col);
+            if (it == m_segColumns.end()) continue;
+            for (size_t k : it->second) {
+                if (!seen.insert(k).second) continue;
+                bool near = k < m_continuous.size() && m_continuous[k];
+                float g = c + (near ? portalExtra() : 0.f);
+                constrain(playerRect(m_samples[k]).expanded(g));
+                // Near portals also keep clear of the straight path to the next step.
+                if (near && k + 1 < m_samples.size()) {
+                    auto const& a = m_samples[k];
+                    auto const& b = m_samples[k + 1];
+                    float d = std::max(std::fabs(b.x - a.x), std::fabs(b.y - a.y));
+                    if (d > 60.f) continue;
+                    int steps = std::max(1, static_cast<int>(std::ceil(d / 0.25f)));
+                    for (int t = 1; t < steps; t++) {
+                        Sample m = a;
+                        float f = static_cast<float>(t) / steps;
+                        m.x = a.x + (b.x - a.x) * f;
+                        m.y = a.y + (b.y - a.y) * f;
+                        m.halfW = std::max(a.halfW, b.halfW);
+                        m.halfH = std::max(a.halfH, b.halfH);
+                        constrain(playerRect(m).expanded(g));
+                    }
+                }
+            }
+        }
+        if (!any) return false;
+        float y = need + (ceiling ? 0.01f : -0.01f);     // touching counts as a hit in GD
+        if (!ceiling && y < kGroundTop) return false;
+        if (m_occupied.count(key(cellOf(x), cellOf(y)))) return false;
+        Placement p{id, x, y, 0.f, true};
+        p.scale = scale;
+        p.radius = R;
+        m_out.push_back(p);
+        return true;
     }
 
     // Exact highest top / lowest bottom of the player hitbox over every path segment
