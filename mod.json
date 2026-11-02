@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.5.1",
+	"version": "v1.6.0",
 	"developer": "heum",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -173,6 +173,24 @@
 			"name": "Show Messages",
 			"description": "Show info messages at the bottom of the editor (path recorded, objects placed, bot on/off). Warnings always show.",
 			"default": false
+		},
+		"play-bot": {
+			"type": "bool",
+			"name": "Showcase Bot (real play)",
+			"description": "Replay the clicks saved in the editor when you play the level for real, for showcase videos.\n<cr>Safe mode is forced while this is on</c>: progress stays at 0%, completions, stars, attempts and jumps are not saved, and the level can't be verified.",
+			"default": false
+		},
+		"check-speed": {
+			"type": "int",
+			"name": "Check Speed",
+			"description": "How fast the frame-perfect check (CHK) runs its test playtests. Physics is identical at any speed; higher just finishes sooner.",
+			"default": 4,
+			"min": 1,
+			"max": 10,
+			"control": {
+				"slider": true,
+				"input": true
+			}
 		}
 	}
 }
