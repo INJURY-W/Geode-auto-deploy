@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.4.0",
+	"version": "v1.5.0",
 	"developer": "heum",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -167,6 +167,12 @@
 			"name": "Select Generated Objects",
 			"description": "Select everything that was placed so you can move or delete it in one go.",
 			"default": true
+		},
+		"show-messages": {
+			"type": "bool",
+			"name": "Show Messages",
+			"description": "Show info messages at the bottom of the editor (path recorded, objects placed, bot on/off). Warnings always show.",
+			"default": false
 		}
 	}
 }

@@ -28,23 +28,31 @@ namespace {
     bool g_botEnabled = false;         // BOT toggle
     bool g_botActive = false;          // replaying during the current playtest
     bool g_sessionActive = false;      // inside a playtest started from the editor
-    bool g_stepBaseSet = false;
-    int g_stepBase = 0;
+    int g_stepCount = 0;               // physics steps finished in this playtest (player 1)
     size_t g_botIndex = 0;
     bool g_injecting = false;          // the bot itself is pressing
 
-    bool editorPlaying(GJBaseGameLayer* layer) {
-        auto lel = LevelEditorLayer::get();
-        return lel && static_cast<GJBaseGameLayer*>(lel) == layer &&
-               lel->m_playbackMode == PlaybackMode::Playing;
-    }
-
+    // A click is stored with the number of physics steps that had finished when it
+    // happened. The bot presses again at that same point between two steps.
     void recordInput(PlayerObject* p, bool down) {
-        if (!g_sessionActive || g_botActive || !g_stepBaseSet) return;
+        if (!g_sessionActive || g_botActive) return;
         auto lel = LevelEditorLayer::get();
         if (!lel || lel->m_player1 != p || lel->m_playbackMode != PlaybackMode::Playing) return;
-        g_inputs.push_back({lel->m_currentStep - g_stepBase, down});
+        g_inputs.push_back({g_stepCount, down});
     }
+
+    void botFire(PlayerObject* p) {
+        if (!g_botActive || !p || p->m_isDead) return;
+        while (g_botIndex < g_inputs.size() && g_inputs[g_botIndex].step <= g_stepCount) {
+            auto const& e = g_inputs[g_botIndex++];
+            g_injecting = true;
+            if (e.down) p->pushButton(PlayerButton::Jump);
+            else p->releaseButton(PlayerButton::Jump);
+            g_injecting = false;
+        }
+    }
+
+    bool showMessages() { return Mod::get()->getSettingValue<bool>("show-messages"); }
 
     pb::Mode modeOf(PlayerObject* p) {
         if (p->m_isShip) return pb::Mode::Ship;
@@ -91,6 +99,9 @@ namespace {
     }
 
     void notify(std::string const& text, NotificationIcon icon) {
+        // Warnings/errors always show; everything else only if "Show Messages" is on.
+        bool important = icon == NotificationIcon::Warning || icon == NotificationIcon::Error;
+        if (!important && !showMessages()) return;
         Notification::create(text, icon)->show();
     }
 }
@@ -100,6 +111,7 @@ namespace {
 // ---------------------------------------------------------------------------
 class $modify(PBPlayerObject, PlayerObject) {
     bool pushButton(PlayerButton button) {
+        if (g_botActive && !g_injecting && isEditorPlayer1(this)) return false; // bot is playing
         bool ret = PlayerObject::pushButton(button);
         if (button == PlayerButton::Jump && isEditorPlayer1(this)) {
             g_holding = true;
@@ -110,6 +122,7 @@ class $modify(PBPlayerObject, PlayerObject) {
     }
 
     bool releaseButton(PlayerButton button) {
+        if (g_botActive && !g_injecting && isEditorPlayer1(this)) return false; // bot is playing
         bool ret = PlayerObject::releaseButton(button);
         if (button == PlayerButton::Jump && isEditorPlayer1(this)) {
             g_holding = false;
@@ -135,11 +148,12 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             g_pressedThisFrame = false;
 
             g_sessionActive = true;
-            g_stepBaseSet = false;
+            g_stepCount = 0;
             g_botIndex = 0;
             g_botActive = g_botEnabled && !g_inputs.empty();
             if (g_botActive) {
                 notify(fmt::format("Bot: replaying {} clicks.", g_inputs.size()), NotificationIcon::Info);
+                botFire(m_player1);   // clicks made before the first physics step
             } else {
                 g_inputs.clear();   // hand-played run: record fresh clicks
                 g_inputs.reserve(1024);
@@ -169,36 +183,16 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
 // tests against hazards - including the sharp corner of every wave click.
 // ---------------------------------------------------------------------------
 class $modify(PBGameLayer, GJBaseGameLayer) {
-    // GD applies queued clicks here, once per physics step. The bot presses at the
-    // same point, so the replay is step-for-step identical to the recorded run.
-    void processQueuedButtons(float dt, bool clearInputQueue) {
-        if (g_sessionActive && editorPlaying(this)) {
-            if (!g_stepBaseSet) {
-                g_stepBase = m_currentStep;
-                g_stepBaseSet = true;
-            }
-            if (g_botActive && m_player1 && !m_player1->m_isDead) {
-                int step = m_currentStep - g_stepBase;
-                while (g_botIndex < g_inputs.size() && g_inputs[g_botIndex].step <= step) {
-                    auto const& e = g_inputs[g_botIndex++];
-                    g_injecting = true;
-                    this->handleButton(e.down, static_cast<int>(PlayerButton::Jump), true);
-                    g_injecting = false;
-                }
-            }
-        }
-        GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-    }
-
-    // While the bot plays, ignore the player's own taps.
-    void handleButton(bool down, int button, bool isPlayer1) {
-        if (g_botActive && !g_injecting && editorPlaying(this)) return;
-        GJBaseGameLayer::handleButton(down, button, isPlayer1);
-    }
-
     int checkCollisions(PlayerObject* player, float dt, bool ignoreDamage) {
         recordStep(player);
-        return GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+        int ret = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+        auto lel = LevelEditorLayer::get();
+        if (g_sessionActive && lel && static_cast<GJBaseGameLayer*>(lel) == this &&
+            lel->m_playbackMode == PlaybackMode::Playing && player == lel->m_player1) {
+            g_stepCount++;
+            botFire(player);   // presses due before the next physics step
+        }
+        return ret;
     }
 
     void recordStep(PlayerObject* p) {
@@ -340,7 +334,9 @@ class $modify(PBEditorUI, EditorUI) {
         if (auto probe = GameObject::createWithKey(settings.spikeID)) {
             probe->setPosition({0.f, 0.f});
             auto r = probe->getObjectRect();
-            if (r.size.width > 0.5f && r.size.width < 60.f && r.size.height > 0.5f && r.size.height < 60.f) {
+            // A fresh object can report its full 30x30 sprite instead of the small hazard
+            // hitbox; only trust the probe if it is clearly the shrunk hazard box.
+            if (r.size.width > 0.5f && r.size.width < 25.f && r.size.height > 0.5f && r.size.height < 25.f) {
                 settings.spikeHalfW = r.size.width * 0.5f;
                 settings.spikeHalfH = r.size.height * 0.5f;
                 settings.spikeOffX = r.getMidX();
