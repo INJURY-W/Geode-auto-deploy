@@ -468,6 +468,28 @@ class $modify(PBEditorUI, EditorUI) {
         if (auto playbackMenu = this->getChildByID("playback-menu")) {
             base.y = playbackMenu->boundingBox().getMaxY();
         }
+        // Put the column right of the playtest STOP button (it only shows while
+        // playtesting, next to the play button), so nothing overlaps then.
+        auto rightEdge = [this](CCNode* n) -> float {
+            if (!n || !n->getParent()) return -1.f;
+            auto bb = n->boundingBox();
+            auto world = n->getParent()->convertToWorldSpace(CCPoint(bb.getMaxX(), bb.getMidY()));
+            return this->convertToNodeSpace(world).x;
+        };
+        auto leftEdge = [this](CCNode* n) -> float {
+            if (!n || !n->getParent()) return -1.f;
+            auto bb = n->boundingBox();
+            auto world = n->getParent()->convertToWorldSpace(CCPoint(bb.getMinX(), bb.getMidY()));
+            return this->convertToNodeSpace(world).x;
+        };
+        float playR = rightEdge(m_playtestBtn);
+        float stopR = rightEdge(m_playtestStopBtn);
+        // If the hidden stop button hasn't been laid out yet, assume it sits right of
+        // the play button with the same width.
+        if (playR > 0.f && stopR < playR + 5.f) stopR = playR + 4.f + (playR - leftEdge(m_playtestBtn));
+        float right = std::max({stopR, playR, rightEdge(m_playbackBtn)});
+        if (right > 0.f) base.x = right + 6.f;
+        else base.x += 70.f;
         menu->setPosition(base);
         // Stacked vertically: AUTO, SET, BOT, CHK
         autoBtn->setPosition({18.f, -15.f});

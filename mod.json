@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.6.0",
+	"version": "v1.6.1",
 	"developer": "heum",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
