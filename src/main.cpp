@@ -206,21 +206,6 @@ namespace {
 }
 
 // ===========================================================================
-// The mod used to be called heum.path-builder: bring its saved clicks over once.
-// ===========================================================================
-$on_mod(Loaded) {
-    std::error_code ec;
-    auto newDir = Mod::get()->getSaveDir();
-    auto oldMacros = newDir.parent_path() / "heum.path-builder" / "macros";
-    auto newMacros = newDir / "macros";
-    if (!std::filesystem::exists(oldMacros, ec) || std::filesystem::exists(newMacros, ec)) return;
-    std::filesystem::create_directories(newDir, ec);
-    std::filesystem::copy(oldMacros, newMacros, std::filesystem::copy_options::recursive, ec);
-    if (ec) log::warn("Could not copy old macros: {}", ec.message());
-    else log::info("Copied saved clicks from heum.path-builder");
-}
-
-// ===========================================================================
 // Clicks: track holding, record hand-played clicks, block taps while the bot plays
 // ===========================================================================
 class $modify(PBPlayerObject, PlayerObject) {

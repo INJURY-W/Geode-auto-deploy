@@ -46,7 +46,7 @@ PC나 휴대폰 브라우저에서 할 수 있습니다.
 1. GitHub에서 새 저장소(Repository)를 만듭니다.
 2. 이 폴더의 파일을 전부 업로드합니다. (`.github/workflows/build.yml` 경로가 그대로 유지되어야 합니다)
 3. 저장소의 **Actions** 탭에서 빌드가 끝나기를 기다립니다 (약 5~10분).
-4. 완료된 빌드의 **Artifacts → Build Output**을 받으면 안에 `revolve.path-builder.geode`가 있습니다.
+4. 완료된 빌드의 **Artifacts → Build Output**을 받으면 안에 `heum.path-builder.geode`가 있습니다.
 
 ## 설치
 1. 안드로이드에 **Geode 런처**가 설치되어 있어야 합니다.
