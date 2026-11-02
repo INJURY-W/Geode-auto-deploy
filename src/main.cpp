@@ -24,10 +24,13 @@ using namespace geode::prelude;
 namespace {
     // --- path recording (editor, hand-played or bot playtests) ---
     std::vector<pb::Sample> g_samples;
+    std::vector<pb::Sample> g_samples2;      // dual mode: player 2's path
     bool g_recording = false;
     bool g_stoppedByDeath = false;
     bool g_holding = false;
     bool g_pressedThisFrame = false;
+    bool g_holding2 = false;
+    bool g_pressedThisFrame2 = false;
     float g_lastHitW = 0.f, g_lastHitH = 0.f;
 
     // --- macro (clicks) for the level in the editor ---
@@ -123,6 +126,32 @@ namespace {
     PlayerObject* sessionPlayer() {
         return sessionLayerAlive() ? g_s.layer->m_player1 : nullptr;
     }
+    PlayerObject* sessionPlayer2() {
+        return sessionLayerAlive() ? g_s.layer->m_player2 : nullptr;
+    }
+    bool twoPlayerLevel(GJBaseGameLayer* l) {
+        return l && l->m_levelSettings && l->m_levelSettings->m_twoPlayerMode;
+    }
+    bool dualActive(GJBaseGameLayer* l) {
+        return l && l->m_gameState.m_isDualMode && l->m_player2;
+    }
+
+    // One click from the replay. Player 1's clicks also move player 2 in dual mode,
+    // like a real tap does, unless the level has 2-player controls (then player 2
+    // has its own clicks).
+    void injectClick(GJBaseGameLayer* l, bool down, bool p2) {
+        if (!l) return;
+        auto press = [&](PlayerObject* p) {
+            if (!p || p->m_isDead) return;
+            g_injecting = true;
+            if (down) p->pushButton(PlayerButton::Jump); else p->releaseButton(PlayerButton::Jump);
+            g_injecting = false;
+        };
+        bool dual = dualActive(l);
+        if (p2) { if (dual) press(l->m_player2); return; }
+        press(l->m_player1);
+        if (dual && !twoPlayerLevel(l)) press(l->m_player2);
+    }
 
     void endSession() { g_s = Session{}; }
 
@@ -132,10 +161,7 @@ namespace {
         auto const& in = g_s.replay->inputs;
         while (g_s.index < in.size() && in[g_s.index].step <= step) {
             auto const& e = in[g_s.index++];
-            g_injecting = true;
-            if (e.down) p->pushButton(PlayerButton::Jump);
-            else p->releaseButton(PlayerButton::Jump);
-            g_injecting = false;
+            injectClick(g_s.layer, e.down, e.p2);
         }
     }
 
@@ -148,6 +174,8 @@ namespace {
         g_s.recordInputs = recordInputs;
         g_holding = false;
         g_pressedThisFrame = false;
+        g_holding2 = false;
+        g_pressedThisFrame2 = false;
         // Clicks made before the first physics step.
         if (g_s.botActive) botFire(layer->m_player1, 0);
     }
@@ -193,10 +221,8 @@ namespace {
     void simStep(PlayerObject* p, int step) {
         g_simLastStep = step;
         auto tap = [&](bool down) {
-            g_injecting = true;
-            if (down) p->pushButton(PlayerButton::Jump); else p->releaseButton(PlayerButton::Jump);
-            g_injecting = false;
-            g_simAdded.push_back({step, down, p->getPositionX()});
+            injectClick(g_s.layer, down, false);
+            g_simAdded.push_back({step, down, p->getPositionX(), false});
         };
         if (g_simReleaseAt >= 0 && step >= g_simReleaseAt) {
             // Only end our own tap - if the recording clicked since, it owns the button now.
@@ -233,8 +259,14 @@ namespace {
     }
 
     void recordInput(PlayerObject* p, bool down) {
-        if (!g_s.recordInputs || g_s.botActive || p != sessionPlayer()) return;
-        g_recMacro.inputs.push_back({g_s.count, down, p->getPositionX()});
+        if (!g_s.recordInputs || g_s.botActive || !p) return;
+        if (p == sessionPlayer()) {
+            g_recMacro.inputs.push_back({g_s.count, down, p->getPositionX(), false});
+        } else if (p == sessionPlayer2() && twoPlayerLevel(g_s.layer)) {
+            // Only 2-player levels give player 2 its own clicks; otherwise its
+            // presses just mirror player 1's and replay mirrors them the same way.
+            g_recMacro.inputs.push_back({g_s.count, down, p->getPositionX(), true});
+        }
     }
 
     pb::Mode modeOf(PlayerObject* p) {
@@ -292,23 +324,34 @@ namespace {
 // ===========================================================================
 class $modify(PBPlayerObject, PlayerObject) {
     bool pushButton(PlayerButton button) {
-        bool mine = button == PlayerButton::Jump && this == sessionPlayer();
-        if (mine && g_s.botActive && !g_injecting) return false;
+        bool jump = button == PlayerButton::Jump;
+        bool mine = jump && this == sessionPlayer();
+        bool mine2 = jump && !mine && this == sessionPlayer2();
+        if ((mine || mine2) && g_s.botActive && !g_injecting) return false;
         bool ret = PlayerObject::pushButton(button);
         if (mine) {
             g_holding = true;
             g_pressedThisFrame = true;
+            recordInput(this, true);
+        } else if (mine2) {
+            g_holding2 = true;
+            g_pressedThisFrame2 = true;
             recordInput(this, true);
         }
         return ret;
     }
 
     bool releaseButton(PlayerButton button) {
-        bool mine = button == PlayerButton::Jump && this == sessionPlayer();
-        if (mine && g_s.botActive && !g_injecting) return false;
+        bool jump = button == PlayerButton::Jump;
+        bool mine = jump && this == sessionPlayer();
+        bool mine2 = jump && !mine && this == sessionPlayer2();
+        if ((mine || mine2) && g_s.botActive && !g_injecting) return false;
         bool ret = PlayerObject::releaseButton(button);
         if (mine) {
             g_holding = false;
+            recordInput(this, false);
+        } else if (mine2) {
+            g_holding2 = false;
             recordInput(this, false);
         }
         return ret;
@@ -335,6 +378,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         }
         if (g_simming) {
             g_samples.clear();
+            g_samples2.clear();
             g_samples.reserve(16384);
             g_recording = true;          // the SIM run becomes the new path
             g_stoppedByDeath = false;
@@ -348,6 +392,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         }
 
         g_samples.clear();
+        g_samples2.clear();
         g_samples.reserve(16384);
         g_recording = true;
         g_stoppedByDeath = false;
@@ -463,15 +508,16 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         int ret = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
         // Touching the ground/ceiling, GD pushes the player out inside this call, so
         // also keep the corrected position: spikes have to clear both.
-        if (recorded && player && !player->m_isDead && !g_samples.empty()) {
+        auto& vec = (player && player == this->m_player2) ? g_samples2 : g_samples;
+        if (recorded && player && !player->m_isDead && !vec.empty()) {
             auto pos = player->getPosition();
-            auto const& last = g_samples.back();
+            auto const& last = vec.back();
             if (std::fabs(pos.x - last.x) > 1e-4f || std::fabs(pos.y - last.y) > 1e-4f) {
                 pb::Sample s = last;
                 s.x = pos.x;
                 s.y = pos.y;
                 s.onGround = player->m_isOnGround;
-                g_samples.push_back(s);
+                vec.push_back(s);
             }
         }
 
@@ -506,7 +552,9 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         auto lel = LevelEditorLayer::get();
         if (!lel || static_cast<GJBaseGameLayer*>(lel) != this) return false;
         if (lel->m_playbackMode != PlaybackMode::Playing) return false;
-        if (p != lel->m_player1) return false;
+        bool second = p == lel->m_player2 && p != lel->m_player1;
+        if (!second && p != lel->m_player1) return false;
+        if (second && !lel->m_gameState.m_isDualMode) return false;   // hidden player 2
         if (p->m_isDead) { g_stoppedByDeath = true; return false; }
 
         auto pos = p->getPosition();
@@ -522,11 +570,17 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         } else {
             s.halfW = s.halfH = 15.f * s.size;
         }
-        g_lastHitW = s.halfW * 2.f;
-        g_lastHitH = s.halfH * 2.f;
         s.mode = modeOf(p);
         s.upsideDown = p->m_isUpsideDown;
         s.onGround = p->m_isOnGround;
+        if (second) {
+            s.holding = g_holding2 || g_pressedThisFrame2;
+            g_pressedThisFrame2 = false;
+            g_samples2.push_back(s);
+            return true;
+        }
+        g_lastHitW = s.halfW * 2.f;
+        g_lastHitH = s.halfH * 2.f;
         s.holding = g_holding || g_pressedThisFrame;
         g_pressedThisFrame = false;
         g_samples.push_back(s);
@@ -1019,7 +1073,9 @@ class $modify(PBEditorUI, EditorUI) {
             }
         }
 
-        auto placements = pb::generate(g_samples, settings, existing, solids);
+        auto placements = g_samples2.size() >= 2
+            ? pb::generateDual(g_samples, g_samples2, settings, existing, solids)
+            : pb::generate(g_samples, settings, existing, solids);
         if (placements.empty()) {
             notify("Nothing to place (check the mode toggles in SET).", NotificationIcon::Info);
             return;

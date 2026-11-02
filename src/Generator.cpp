@@ -627,4 +627,45 @@ std::vector<Placement> generate(
     return b.run();
 }
 
+bool hitsPath(Placement const& p, std::vector<Sample> const& samples, Settings const& st, float gap) {
+    for (auto const& smp : samples) {
+        float l = smp.x - smp.halfW - gap, r = smp.x + smp.halfW + gap;
+        float b = smp.y - smp.halfH - gap, t = smp.y + smp.halfH + gap;
+        if (p.radius > 0.f) {
+            float dx = std::max({l - p.x, 0.f, p.x - r});
+            float dy = std::max({b - p.y, 0.f, p.y - t});
+            if (dx * dx + dy * dy <= p.radius * p.radius) return true;
+        } else if (p.isSpike) {
+            bool flip = std::fabs(p.rotation - 180.f) < 1.f;
+            float hw = st.spikeHalfW * p.scale, hh = st.spikeHalfH * p.scale;
+            float cx = p.x + (flip ? -1.f : 1.f) * st.spikeOffX * p.scale;
+            float cy = p.y + (flip ? -1.f : 1.f) * st.spikeOffY * p.scale;
+            if (cx - hw <= r && l <= cx + hw && cy - hh <= t && b <= cy + hh) return true;
+        } else {
+            float h = 15.f * p.scale;
+            if (p.x - h < r && l < p.x + h && p.y - h < t && b < p.y + h) return true;
+        }
+    }
+    return false;
+}
+
+std::vector<Placement> generateDual(std::vector<Sample> const& s1, std::vector<Sample> const& s2,
+                                    Settings const& st, std::vector<ExistingCell> const& existing,
+                                    std::vector<SolidRect> const& solids) {
+    if (s2.size() < 2) return generate(s1, st, existing, solids);
+    float gap = st.style == Style::Tight ? std::max(st.tightGap, st.portalGap) : st.spikeClearance;
+    auto a = generate(s1, st, existing, solids);
+    // Player 2's run also keeps clear of the blocks placed for player 1.
+    auto existing2 = existing;
+    for (auto const& p : a) {
+        if (!p.isSpike) existing2.push_back({static_cast<int>(std::floor(p.x / kCell)), static_cast<int>(std::floor(p.y / kCell))});
+    }
+    auto b = generate(s2, st, existing2, solids);
+    std::vector<Placement> out;
+    out.reserve(a.size() + b.size());
+    for (auto const& p : a) if (!hitsPath(p, s2, st, gap)) out.push_back(p);
+    for (auto const& p : b) if (!hitsPath(p, s1, st, gap)) out.push_back(p);
+    return out;
+}
+
 } // namespace pb

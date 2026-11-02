@@ -12,6 +12,7 @@ struct InputEvent {
     int step = 0;      // physics steps finished when the click happened
     bool down = true;  // press or release
     float x = 0.f;     // player x at that moment (for showing results)
+    bool p2 = false;   // 2-player levels: click on player 2's side
 };
 
 struct Macro {

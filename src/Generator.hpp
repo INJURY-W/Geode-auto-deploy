@@ -82,4 +82,17 @@ std::vector<Placement> generate(
     std::vector<SolidRect> const& solids = {}
 );
 
+// Dual mode: places around each player's path separately, then drops anything that
+// would hit (or, for blocks, sit inside) the other player's path.
+std::vector<Placement> generateDual(
+    std::vector<Sample> const& samples1,
+    std::vector<Sample> const& samples2,
+    Settings const& settings,
+    std::vector<ExistingCell> const& existing,
+    std::vector<SolidRect> const& solids = {}
+);
+
+// True if the placement touches the player's hitbox at any recorded step (with `gap`).
+bool hitsPath(Placement const& p, std::vector<Sample> const& samples, Settings const& settings, float gap);
+
 } // namespace pb
