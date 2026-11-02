@@ -3,9 +3,9 @@
 	"gd": {
 		"android": "2.2081"
 	},
-	"id": "heum.path-builder",
+	"id": "revolve.path-builder",
 	"name": "Path Builder",
-	"version": "v1.7.3",
+	"version": "v1.7.4",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
