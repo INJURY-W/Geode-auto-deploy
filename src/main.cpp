@@ -276,6 +276,10 @@ namespace {
         st.sawChance = static_cast<float>(mod->getSettingValue<int64_t>("saw-chance")) / 100.f;
         st.sizeMin = static_cast<float>(mod->getSettingValue<double>("size-min"));
         st.sizeMax = static_cast<float>(mod->getSettingValue<double>("size-max"));
+        st.chain = mod->getSettingValue<std::string>("tight-pattern") != "random";
+        st.sawSpacing = pixels("saw-spacing");
+        st.sawScale = static_cast<float>(mod->getSettingValue<double>("saw-size"));
+        st.spikeScale = static_cast<float>(mod->getSettingValue<double>("spike-size"));
         st.seed = std::random_device{}();
         return st;
     }
@@ -978,7 +982,8 @@ class $modify(PBEditorUI, EditorUI) {
         }
 
         // Saws: read each one's round hazard radius from the game.
-        if (settings.style == pb::Style::Tight && settings.sawChance > 0.f) {
+        if (settings.style == pb::Style::Tight &&
+            (settings.chain ? settings.sawSpacing > 0.f : settings.sawChance > 0.f)) {
             std::stringstream ids(Mod::get()->getSettingValue<std::string>("saw-ids"));
             std::string tok;
             while (std::getline(ids, tok, ',')) {

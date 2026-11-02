@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.12.0",
+	"version": "v1.13.0",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -118,7 +118,7 @@
 			"type": "float",
 			"name": "Tight Spike Spacing (px)",
 			"description": "Tight style only. Horizontal distance between spikes in free-move pixels (30 px = 1 block). Lower = more spikes.",
-			"default": 15.0,
+			"default": 6.0,
 			"min": 3.0,
 			"max": 90.0,
 			"control": {
@@ -130,10 +130,64 @@
 				"input": true
 			}
 		},
+		"tight-pattern": {
+			"type": "string",
+			"name": "Tight Pattern",
+			"description": "<cy>chain</c>: neat rows - identical saws at an even spacing along each side (top row shifted half a step), identical small spikes packed in between.\n<cy>random</c>: saws and spikes mixed at random with random sizes (Saw Chance, Min/Max Size).",
+			"default": "chain",
+			"one-of": [
+				"chain",
+				"random"
+			]
+		},
+		"saw-spacing": {
+			"type": "float",
+			"name": "Saw Spacing (px)",
+			"description": "Chain pattern: distance between saw centers on one side, in pixels (30 px = 1 block). About the saw's diameter makes a touching chain. 0 = no saws.",
+			"default": 90.0,
+			"min": 0.0,
+			"max": 300.0,
+			"control": {
+				"arrow-step": 5.0,
+				"big-arrows": true,
+				"big-arrow-step": 30.0,
+				"slider": true,
+				"slider-step": 5.0,
+				"input": true
+			}
+		},
+		"saw-size": {
+			"type": "float",
+			"name": "Saw Size",
+			"description": "Chain pattern: scale of every saw (1 = normal).",
+			"default": 1.0,
+			"min": 0.2,
+			"max": 4.0,
+			"control": {
+				"arrow-step": 0.1,
+				"slider": true,
+				"slider-step": 0.05,
+				"input": true
+			}
+		},
+		"spike-size": {
+			"type": "float",
+			"name": "Spike Size",
+			"description": "Chain pattern: scale of every spike (1 = normal, 0.5 = mini).",
+			"default": 0.5,
+			"min": 0.2,
+			"max": 3.0,
+			"control": {
+				"arrow-step": 0.1,
+				"slider": true,
+				"slider-step": 0.05,
+				"input": true
+			}
+		},
 		"saw-chance": {
 			"type": "int",
-			"name": "Saw Chance (%)",
-			"description": "Tight style only. Share of spots that get a saw instead of a spike, mixed in between the spikes. 0 = spikes only.",
+			"name": "Saw Chance (%, random)",
+			"description": "Random pattern only. Share of spots that get a saw instead of a spike. 0 = spikes only.",
 			"default": 25,
 			"min": 0,
 			"max": 100,
@@ -145,13 +199,13 @@
 		"saw-ids": {
 			"type": "string",
 			"name": "Saw Object IDs",
-			"description": "Saws to pick from at random, comma separated. Their round hitbox is read from the game.",
+			"description": "Saws to use, comma separated. Chain pattern uses the first one; random picks among them. Their round hitbox is read from the game.",
 			"default": "88,89,98"
 		},
 		"size-min": {
 			"type": "float",
-			"name": "Min Size",
-			"description": "Tight style only. Smallest random scale for spikes and saws (1 = normal).",
+			"name": "Min Size (random)",
+			"description": "Random pattern only. Smallest random scale for spikes and saws (1 = normal).",
 			"default": 0.7,
 			"min": 0.2,
 			"max": 3.0,
@@ -164,8 +218,8 @@
 		},
 		"size-max": {
 			"type": "float",
-			"name": "Max Size",
-			"description": "Tight style only. Largest random scale for spikes and saws (1 = normal). Set both to 1 for normal sizes.",
+			"name": "Max Size (random)",
+			"description": "Random pattern only. Largest random scale for spikes and saws (1 = normal). Set both to 1 for normal sizes.",
 			"default": 1.3,
 			"min": 0.2,
 			"max": 3.0,

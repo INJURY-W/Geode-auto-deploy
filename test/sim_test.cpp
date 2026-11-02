@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <algorithm>
 // Host-side test: simulates a rough playtest path and checks the generator never
 // places anything that would touch the recorded player. Not part of the mod build.
@@ -76,9 +77,12 @@ int main(int argc, char** argv) {
     if (style == "dense") st.style = Style::Dense;
     if (style == "blocks") st.style = Style::BlocksOnly;
     if (style == "tight") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 15.f;
-        st.saws = {{88, 16.f}, {89, 10.f}}; st.sawChance = 0.3f; st.sizeMin = 0.6f; st.sizeMax = 1.4f; st.seed = 7; }
+        st.saws = {{88, 16.f}, {89, 10.f}}; st.sawChance = 0.3f; st.sizeMin = 0.6f; st.sizeMax = 1.4f; st.seed = 7;
+        st.chain = false; }
+    if (style == "chain") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 6.f;
+        st.saws = {{88, 16.f}}; st.chain = true; st.sawSpacing = 90.f; st.sawScale = 1.2f; st.spikeScale = 0.5f; }
     std::vector<SolidRect> solids;
-    if (style == "tight") {
+    if (style == "tight" || style == "chain") {
         // A few of the player's own blocks along the cube part (the step it jumps onto).
         for (float bx = 1350.f; bx < 1500.f; bx += 30.f) solids.push_back({bx, 90.f, bx + 30.f, 120.f});
     }
@@ -130,6 +134,12 @@ int main(int argc, char** argv) {
         int fitted = 0;
         for (auto const& p : out) if (p.isSpike && p.scale < st.sizeMax - 1e-3f) fitted++;
         std::printf("%s: saws=%d scale=%.2f..%.2f solids=%zu fitted-to-gap=%d\n", style.c_str(), saws, smin, smax, solids.size(), fitted);
+    }
+    if (std::getenv("PB_DUMP")) {
+        FILE* f = std::fopen(std::getenv("PB_DUMP"), "w");
+        for (auto const& s : path) std::fprintf(f, "P %f %f %f %f\n", s.x, s.y, s.halfW, s.halfH);
+        for (auto const& p : out) std::fprintf(f, "O %d %f %f %f %f %f %d\n", p.objectID, p.x, p.y, p.rotation, p.scale, p.radius, p.isSpike ? 1 : 0);
+        std::fclose(f);
     }
     std::printf("style=%s samples=%zu blocks=%d spikes=%d collisions=%d\n",
                 style.c_str(), path.size(), blocks, spikes, bad);

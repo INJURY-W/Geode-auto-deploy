@@ -379,6 +379,7 @@ public:
                 x1 = std::max(x1, m_samples[j].x);
                 j++;
             }
+            if (m_st.chain) { chainSegment(x0, x1, step); i = j; continue; }
             for (float x = x0; x <= x1 + 0.01f; x += step) {
                 for (bool ceiling : {true, false}) {
                     float scale = randScale();
@@ -392,6 +393,33 @@ public:
                 }
             }
             i = j;
+        }
+    }
+
+    // Chain pattern for one stretch [x0, x1]: per side, first a row of identical saws
+    // at an even spacing (the top row shifted half a step so they zig-zag), then
+    // identical small spikes at Spike Spacing everywhere a saw doesn't cover.
+    void chainSegment(float x0, float x1, float step) {
+        bool haveSaw = !m_st.saws.empty() && m_st.sawSpacing > 0.f;
+        float sawStep = std::max(6.f, m_st.sawSpacing);
+        for (bool ceiling : {false, true}) {
+            std::vector<std::pair<float, float>> saws;   // x, radius
+            if (haveSaw) {
+                auto const& d = m_st.saws.front();
+                float R = d.radius * m_st.sawScale;
+                float start = x0 + (ceiling ? sawStep * 0.5f : 0.f);
+                for (float x = start; x <= x1 + 0.01f; x += sawStep) {
+                    if (placeSaw(x, d.id, R, m_st.sawScale, ceiling)) saws.push_back({x, R});
+                }
+            }
+            float sw = 15.f * m_st.spikeScale;   // half the spike's drawn width
+            for (float x = x0; x <= x1 + 0.01f; x += step) {
+                bool covered = false;
+                for (auto const& [sx, R] : saws) {
+                    if (std::fabs(x - sx) < R * 0.85f + sw * 0.5f) { covered = true; break; }
+                }
+                if (!covered) placeScaledSpike(x, m_st.spikeScale, ceiling);
+            }
         }
     }
 

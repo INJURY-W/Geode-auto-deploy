@@ -43,6 +43,12 @@ struct Settings {
     std::vector<SawDef> saws;
     float sawChance = 0.f;      // 0..1, share of tight slots that become a saw
     float sizeMin = 1.f, sizeMax = 1.f;
+    // Chain pattern (instead of random): same-size saws at an even spacing along
+    // each side, top row shifted half a step, with same-size small spikes in between.
+    bool chain = true;
+    float sawSpacing = 60.f;    // units between saw centers on one side (0 = no saws)
+    float sawScale = 1.f;
+    float spikeScale = 0.5f;
     uint32_t seed = 1;
     int blockID = 1;
     int spikeID = 8;
