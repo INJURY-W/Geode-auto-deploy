@@ -45,3 +45,20 @@ jobs:
         with:
           name: Build Output
           path: ${{ steps.build.outputs.build-output }}
+
+      # Publish the .geode as a release asset so it can be downloaded directly on a phone.
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILE=$(find "${{ steps.build.outputs.build-output }}" -name '*.geode' | head -n 1)
+          VERSION=$(jq -r '.version' mod.json 2>/dev/null || echo latest)
+          gh release delete latest -R "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create latest "$FILE" -R "$GITHUB_REPOSITORY" \
+            --title "Path Builder $VERSION (latest build)" \
+            --notes "Latest Android build of Path Builder. Download the .geode file below and put it in your Geode mods folder." \
+            --target "$GITHUB_SHA"
+
+permissions:
+  contents: write
