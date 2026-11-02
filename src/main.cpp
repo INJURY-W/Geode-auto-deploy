@@ -7,6 +7,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/ui/GeodeUI.hpp>
+#include <Geode/ui/MDPopup.hpp>
 
 #include <cmath>
 
@@ -63,6 +64,7 @@ namespace {
     pb::Macro g_checkMacro;
     bool g_testDone = false;
     bool g_userStopped = false;            // player tapped the playtest STOP button
+    int g_checkSpeed = 1;                  // simulated frames per real frame while checking
     bool g_testSurvived = false;
     struct VariantResult { int index; int delta; bool survived; };
     std::vector<VariantResult> g_results;
@@ -288,6 +290,12 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
             notify("Frame-perfect check cancelled.", NotificationIcon::Warning);
         }
 
+        if (wasHandRun) {
+            // Stopping the playtest releases the button with the player already reset
+            // to the start; that isn't a real click.
+            auto& in = g_recMacro.inputs;
+            while (in.size() > 1 && !in.back().down && in.back().x < 1.f && in[in.size() - 2].x > 30.f) in.pop_back();
+        }
         if (wasHandRun && !g_recMacro.empty()) {
             g_macro = g_recMacro;
             if (!g_macroKey.empty()) g_macro.save(macroPath(g_macroKey));
@@ -308,6 +316,21 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
 // Physics steps: record the path, count steps, drive the bot and the checker
 // ===========================================================================
 class $modify(PBGameLayer, GJBaseGameLayer) {
+    // CHK speed: instead of speeding up time (which packs many physics steps into
+    // one frame and changes what GD checks per frame), run several ordinary
+    // 120 fps frames per real frame. Each one behaves exactly like normal play.
+    void update(float dt) {
+        auto lel = LevelEditorLayer::get();
+        bool checkRun = g_checking && lel && static_cast<GJBaseGameLayer*>(lel) == this &&
+                        lel->m_playbackMode == PlaybackMode::Playing;
+        if (!checkRun) { GJBaseGameLayer::update(dt); return; }
+        constexpr float kFrame = 1.f / 120.f;
+        for (int i = 0; i < g_checkSpeed; i++) {
+            if (!g_checking || g_testDone || lel->m_playbackMode != PlaybackMode::Playing) break;
+            GJBaseGameLayer::update(kFrame);
+        }
+    }
+
     int checkCollisions(PlayerObject* player, float dt, bool ignoreDamage) {
         bool recorded = recordStep(player);
         int ret = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
@@ -585,8 +608,7 @@ class $modify(PBEditorUI, EditorUI) {
 
         g_checking = true;
         g_variantPos = -1;
-        float speed = static_cast<float>(Mod::get()->getSettingValue<int64_t>("check-speed"));
-        CCDirector::get()->getScheduler()->setTimeScale(std::max(1.f, speed));
+        g_checkSpeed = std::max<int>(1, static_cast<int>(Mod::get()->getSettingValue<int64_t>("check-speed")));
         queueNextCheck();
     }
 
@@ -640,9 +662,9 @@ class $modify(PBEditorUI, EditorUI) {
         if (g_variantPos < 0) {
             if (!g_testSurvived) {
                 stopCheck();
-                FLAlertLayer::create("Frame Perfect Check",
-                    "The saved clicks <cr>do not pass</c> this layout - the bot dies even with the exact recorded timing.\n"
-                    "This layout is not passable on the recorded path (gap too small?).", "OK")->show();
+                MDPopup::create("Frame Perfect Check",
+                    "## Does not pass\n\nThe bot dies even with the exact recorded clicks, so this layout "
+                    "is not passable on the recorded path (gap too small?).", "OK")->show();
                 return;
             }
         } else {
@@ -675,24 +697,17 @@ class $modify(PBEditorUI, EditorUI) {
         }
         int perfect = 0;
         std::string list;
-        int shown = 0, hidden = 0;
         for (size_t i = 0; i < in.size(); i++) {
             if (!earlyOk[i] && !lateOk[i]) { perfect++; continue; }
-            if (shown < 10) {
-                list += fmt::format("\n#{} {} at {:.1f} blocks: {}", i + 1, in[i].down ? "press" : "release",
-                                    in[i].x / 30.f,
-                                    earlyOk[i] && lateOk[i] ? "early & late OK" : earlyOk[i] ? "1 step early OK" : "1 step late OK");
-                shown++;
-            } else {
-                hidden++;
-            }
+            list += fmt::format("- **#{}** {} @ {:.1f} blocks: {}\n", i + 1, in[i].down ? "press" : "release",
+                                in[i].x / 30.f,
+                                earlyOk[i] && lateOk[i] ? "early & late OK" : earlyOk[i] ? "early OK" : "late OK");
         }
         std::string text = fmt::format(
-            "<cg>{}</c> / {} clicks are frame perfect\n(moving them 1 physics step earlier or later kills you).",
+            "# {} / {} frame perfect\n\nMoving a frame-perfect click 1 physics step earlier or later kills you.\n\n",
             perfect, in.size());
-        if (!list.empty()) text += "\n\nNot frame perfect:" + list;
-        if (hidden > 0) text += fmt::format("\n...and {} more", hidden);
-        FLAlertLayer::create("Frame Perfect Check", text, "OK")->show();
+        if (!list.empty()) text += "## Not frame perfect\n\n" + list;
+        MDPopup::create("Frame Perfect Check", text, "OK")->show();
     }
 
     // -----------------------------------------------------------------------
