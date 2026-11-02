@@ -10,10 +10,11 @@ bool Macro::save(std::filesystem::path const& file) const {
     std::filesystem::create_directories(file.parent_path(), ec);
     std::ofstream out(file, std::ios::trunc);
     if (!out) return false;
-    out << "PBMACRO 2\n";
+    out << "PBMACRO 3\n";
     out << "x0 " << (hasX0 ? 1 : 0) << " " << x0 << "\n";
     out << "end " << endStep << "\n";
     out << "dt " << frameDt << "\n";
+    out << "tps " << tps << "\n";
     for (auto const& e : inputs) out << e.step << " " << (e.down ? 1 : 0) << " " << e.x << "\n";
     return static_cast<bool>(out);
 }
@@ -24,7 +25,7 @@ bool Macro::load(std::filesystem::path const& file) {
     std::string magic;
     int version = 0;
     in >> magic >> version;
-    if (magic != "PBMACRO" || (version != 1 && version != 2)) return false;
+    if (magic != "PBMACRO" || (version < 1 || version > 3)) return false;
 
     Macro m;
     std::string tag;
@@ -37,6 +38,10 @@ bool Macro::load(std::filesystem::path const& file) {
     if (version >= 2) {
         in >> tag >> m.frameDt;
         if (tag != "dt") return false;
+    }
+    if (version >= 3) {
+        in >> tag >> m.tps;
+        if (tag != "tps") return false;
     }
 
     InputEvent e;

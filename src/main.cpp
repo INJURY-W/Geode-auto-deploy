@@ -67,6 +67,8 @@ namespace {
     int g_checkSpeed = 1;                  // simulated frames per real frame while checking
     double g_recDtSum = 0.0;               // frame times of the hand-played run
     int g_recFrames = 0;
+    double g_playDtSum = 0.0;              // real play: time since the attempt started
+    bool g_playRateChecked = false;
     bool g_testSurvived = false;
     struct VariantResult { int index; int delta; bool survived; };
     std::vector<VariantResult> g_results;
@@ -302,6 +304,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         }
         if (wasHandRun && !g_recMacro.empty()) {
             if (g_recFrames > 0) g_recMacro.frameDt = static_cast<float>(g_recDtSum / g_recFrames);
+            if (g_recDtSum > 0.0) g_recMacro.tps = static_cast<float>(g_recMacro.endStep / g_recDtSum);
             g_macro = g_recMacro;
             if (!g_macroKey.empty()) g_macro.save(macroPath(g_macroKey));
         }
@@ -333,7 +336,19 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
                 g_recDtSum += dt;
                 g_recFrames++;
             }
+            bool playRun = g_s.where == Where::Play && g_s.botActive && g_s.layer == this;
+            if (playRun && dt > 0.f) g_playDtSum += dt;
             GJBaseGameLayer::update(dt);
+            // After a second of real play, warn once if the physics rate differs from
+            // the recording - the bot's clicks only line up at the same TPS.
+            if (playRun && !g_playRateChecked && g_playDtSum >= 1.0 && g_playMacro.tps > 0.f) {
+                g_playRateChecked = true;
+                float live = static_cast<float>(g_s.count / g_playDtSum);
+                if (std::fabs(live - g_playMacro.tps) > 0.05f * g_playMacro.tps) {
+                    Notification::create(fmt::format("Bot was recorded at {} TPS, now running at {} TPS - it will desync.",
+                        std::lround(g_playMacro.tps), std::lround(live)), NotificationIcon::Warning)->show();
+                }
+            }
             return;
         }
         // Same frame rate as the run was recorded at (falls back to the live one).
@@ -417,6 +432,7 @@ class $modify(PBPlayLayer, PlayLayer) {
     bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
         g_playMacro.clear();
         g_playSafe = false;
+        g_playRateChecked = false;
         if (Mod::get()->getSettingValue<bool>("play-bot")) {
             if (loadMacroFor(level, g_playMacro)) {
                 g_playSafe = true;
@@ -437,6 +453,7 @@ class $modify(PBPlayLayer, PlayLayer) {
         PlayLayer::resetLevel();
 
         bool canBot = g_playSafe && !m_isPracticeMode && !m_startPosObject && !m_isPlatformer;
+        g_playDtSum = 0.0;
         if (canBot) startSession(Where::Play, this, true, &g_playMacro, false);
         else if (g_s.where == Where::Play) endSession();
     }
@@ -718,8 +735,10 @@ class $modify(PBEditorUI, EditorUI) {
         }
         std::string text = fmt::format(
             "# {} / {} frame perfect\n\nMoving a frame-perfect click 1 physics step earlier or later kills you.\n\n"
-            "Checked at **{} fps** (the frame rate the clicks were recorded at).\n\n",
-            perfect, in.size(), g_macro.frameDt > 0.f ? static_cast<int>(std::lround(1.f / g_macro.frameDt)) : 0);
+            "Checked at **{} fps · {} TPS** (the rates the clicks were recorded at).\n\n",
+            perfect, in.size(),
+            g_macro.frameDt > 0.f ? fmt::format("{}", std::lround(1.f / g_macro.frameDt)) : std::string("?"),
+            g_macro.tps > 0.f ? fmt::format("{}", std::lround(g_macro.tps)) : std::string("?"));
         if (!list.empty()) text += "## Not frame perfect\n\n" + list;
         MDPopup::create("Frame Perfect Check", text, "OK")->show();
     }

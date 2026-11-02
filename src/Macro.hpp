@@ -20,6 +20,7 @@ struct Macro {
     bool hasX0 = false;
     int endStep = 0;   // last physics step of the recorded run
     float frameDt = 0.f; // average frame time of the recorded run (0 = unknown)
+    float tps = 0.f;     // physics steps per second of the recorded run (0 = unknown)
 
     bool empty() const { return inputs.empty(); }
     void clear() { *this = Macro{}; }
