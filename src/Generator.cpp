@@ -371,6 +371,10 @@ public:
     // whose hitbox touches the x-window [l, r]. The path between two recorded physics
     // steps is treated as a straight line (GD only tests at the steps themselves, so
     // this is the same or slightly safer than the game).
+    // Highest top / lowest bottom of the player hitbox over every recorded physics
+    // step whose hitbox touches the x-window [l, r]. Only the recorded steps count:
+    // GD tests collisions at exactly those positions and nowhere in between, so a
+    // spike may reach into the gap between two steps on a slope.
     void segmentExtremes(float l, float r, float& lo, float& hi) const {
         std::unordered_set<size_t> seen;
         for (int col = cellOf(l); col <= cellOf(r); col++) {
@@ -378,28 +382,10 @@ public:
             if (it == m_segColumns.end()) continue;
             for (size_t i : it->second) {
                 if (!seen.insert(i).second) continue;
-                auto const& a = m_samples[i];
-                size_t j = (i + 1 < m_samples.size()) ? i + 1 : i;
-                auto const& b0 = m_samples[j];
-                bool teleport = std::fabs(b0.x - a.x) > 60.f || std::fabs(b0.y - a.y) > 60.f;
-                auto const& b = teleport ? a : b0;
-                float hw = std::max(a.halfW, b.halfW), hh = std::max(a.halfH, b.halfH);
-                // Hitbox touches the window (inclusive) when center x is in [l - hw, r + hw].
-                float xa = l - hw, xb = r + hw;
-                float dx = b.x - a.x;
-                float t0, t1;
-                if (std::fabs(dx) < 1e-6f) {
-                    if (a.x < xa || a.x > xb) continue;
-                    t0 = 0.f; t1 = 1.f;
-                } else {
-                    float ta = (xa - a.x) / dx, tb = (xb - a.x) / dx;
-                    t0 = std::max(0.f, std::min(ta, tb));
-                    t1 = std::min(1.f, std::max(ta, tb));
-                    if (t0 > t1) continue;
-                }
-                float y0 = a.y + (b.y - a.y) * t0, y1 = a.y + (b.y - a.y) * t1;
-                hi = std::max(hi, std::max(y0, y1) + hh);
-                lo = std::min(lo, std::min(y0, y1) - hh);
+                auto pr = playerRect(m_samples[i]);
+                if (pr.r < l || pr.l > r) continue;   // touching counts, like GD
+                hi = std::max(hi, pr.t);
+                lo = std::min(lo, pr.b);
             }
         }
     }

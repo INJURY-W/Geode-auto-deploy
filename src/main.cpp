@@ -268,12 +268,20 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
 
     void onStopPlaytest() {
         bool wasHandRun = g_s.where == Where::Editor && g_s.recordInputs;
-        // Stopped by the player in the middle of a check run -> cancel the check.
-        bool userStoppedCheck = g_checking && !g_testDone;
+        // A check run stopped from outside: if the player had died (GD stopping the
+        // playtest itself), count it as a death and carry on; otherwise the player
+        // pressed stop -> cancel the check.
+        bool checkRunOpen = g_checking && !g_testDone;
+        bool diedInRun = checkRunOpen && g_s.dead;
         LevelEditorLayer::onStopPlaytest();
-        if (userStoppedCheck) {
+        if (checkRunOpen && diedInRun) {
+            g_testDone = true;
+            g_testSurvived = false;
+            Loader::get()->queueInMainThread([] { finishCheckTest(); });
+        } else if (checkRunOpen) {
             g_checking = false;
             CCDirector::get()->getScheduler()->setTimeScale(1.f);
+            Loader::get()->queueInMainThread([] { finishCheckTest(); });  // clears the progress label
             notify("Frame-perfect check cancelled.", NotificationIcon::Warning);
         }
 
@@ -298,8 +306,21 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
 // ===========================================================================
 class $modify(PBGameLayer, GJBaseGameLayer) {
     int checkCollisions(PlayerObject* player, float dt, bool ignoreDamage) {
-        recordStep(player);
+        bool recorded = recordStep(player);
         int ret = GJBaseGameLayer::checkCollisions(player, dt, ignoreDamage);
+        // Touching the ground/ceiling, GD pushes the player out inside this call, so
+        // also keep the corrected position: spikes have to clear both.
+        if (recorded && player && !player->m_isDead && !g_samples.empty()) {
+            auto pos = player->getPosition();
+            auto const& last = g_samples.back();
+            if (std::fabs(pos.x - last.x) > 1e-4f || std::fabs(pos.y - last.y) > 1e-4f) {
+                pb::Sample s = last;
+                s.x = pos.x;
+                s.y = pos.y;
+                s.onGround = player->m_isOnGround;
+                g_samples.push_back(s);
+            }
+        }
 
         if (g_s.where != Where::None && g_s.layer == this && player == this->m_player1 && sessionLayerAlive()) {
             onStep(player);
@@ -317,13 +338,13 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         return ret;
     }
 
-    void recordStep(PlayerObject* p) {
-        if (!g_recording || g_stoppedByDeath || !p || g_checking) return;
+    bool recordStep(PlayerObject* p) {
+        if (!g_recording || g_stoppedByDeath || !p || g_checking) return false;
         auto lel = LevelEditorLayer::get();
-        if (!lel || static_cast<GJBaseGameLayer*>(lel) != this) return;
-        if (lel->m_playbackMode != PlaybackMode::Playing) return;
-        if (p != lel->m_player1) return;
-        if (p->m_isDead) { g_stoppedByDeath = true; return; }
+        if (!lel || static_cast<GJBaseGameLayer*>(lel) != this) return false;
+        if (lel->m_playbackMode != PlaybackMode::Playing) return false;
+        if (p != lel->m_player1) return false;
+        if (p->m_isDead) { g_stoppedByDeath = true; return false; }
 
         auto pos = p->getPosition();
         pb::Sample s;
@@ -346,6 +367,7 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         s.holding = g_holding || g_pressedThisFrame;
         g_pressedThisFrame = false;
         g_samples.push_back(s);
+        return true;
     }
 };
 
@@ -557,13 +579,42 @@ class $modify(PBEditorUI, EditorUI) {
         g_variantPos = -1;
         float speed = static_cast<float>(Mod::get()->getSettingValue<int64_t>("check-speed"));
         CCDirector::get()->getScheduler()->setTimeScale(std::max(1.f, speed));
-        Notification::create(fmt::format("Checking {} clicks ({} runs)...", in.size(), g_variants.size() + 1),
-                             NotificationIcon::Loading)->show();
-        this->scheduleOnce(schedule_selector(PBEditorUI::runNextCheck), 0.f);
+        queueNextCheck();
     }
 
-    void runNextCheck(float) {
-        if (!g_checking) return;
+    // Next run is started on the next frame, outside GD's own playtest handling.
+    static void queueNextCheck() {
+        Loader::get()->queueInMainThread([] {
+            Loader::get()->queueInMainThread([] {
+                auto lel = LevelEditorLayer::get();
+                if (lel && lel->m_editorUI) static_cast<PBEditorUI*>(lel->m_editorUI)->runNextCheck();
+            });
+        });
+    }
+
+    // Progress shown on screen while checking: "CHK 3 / 25".
+    void setCheckProgress(std::string const& text) {
+        auto label = static_cast<CCLabelBMFont*>(this->getChildByID("check-progress"_spr));
+        if (!label) {
+            label = CCLabelBMFont::create("", "goldFont.fnt");
+            label->setID("check-progress"_spr);
+            label->setScale(0.6f);
+            auto winSize = CCDirector::get()->getWinSize();
+            label->setPosition({winSize.width / 2.f, winSize.height - 60.f});
+            this->addChild(label, 100);
+        }
+        label->setString(text.c_str());
+    }
+
+    void clearCheckProgress() {
+        if (auto label = this->getChildByID("check-progress"_spr)) label->removeFromParent();
+    }
+
+    void runNextCheck() {
+        if (!g_checking) { clearCheckProgress(); return; }
+        int total = static_cast<int>(g_variants.size()) + 1;
+        setCheckProgress(g_variantPos < 0 ? fmt::format("CHK baseline / {} runs", total)
+                                          : fmt::format("CHK {} / {}", g_variantPos + 2, total));
         g_checkMacro = g_macro;
         if (g_variantPos >= 0) {
             auto const& v = g_variants[g_variantPos];
@@ -576,7 +627,7 @@ class $modify(PBEditorUI, EditorUI) {
 
     void afterCheckTest() {
         if (m_editorLayer->m_playbackMode != PlaybackMode::Not) this->onStopPlaytest(nullptr);
-        if (!g_checking) return;
+        if (!g_checking) { clearCheckProgress(); return; }
 
         if (g_variantPos < 0) {
             if (!g_testSurvived) {
@@ -597,12 +648,13 @@ class $modify(PBEditorUI, EditorUI) {
             showCheckResults();
             return;
         }
-        this->scheduleOnce(schedule_selector(PBEditorUI::runNextCheck), 0.05f);
+        queueNextCheck();
     }
 
     void stopCheck() {
         g_checking = false;
         CCDirector::get()->getScheduler()->setTimeScale(1.f);
+        clearCheckProgress();
         if (m_editorLayer->m_playbackMode != PlaybackMode::Not) this->onStopPlaytest(nullptr);
     }
 
@@ -627,7 +679,9 @@ class $modify(PBEditorUI, EditorUI) {
                 hidden++;
             }
         }
-        std::string text = fmt::format("<cg>{}</c> / {} clicks are 240 TPS frame perfect.", perfect, in.size());
+        std::string text = fmt::format(
+            "<cg>{}</c> / {} clicks are 240 TPS frame perfect\n(moving them 1 physics step earlier or later kills you).",
+            perfect, in.size());
         if (!list.empty()) text += "\n\nNot frame perfect:" + list;
         if (hidden > 0) text += fmt::format("\n...and {} more", hidden);
         FLAlertLayer::create("Frame Perfect Check", text, "OK")->show();

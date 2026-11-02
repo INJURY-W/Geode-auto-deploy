@@ -83,14 +83,19 @@ int main(int argc, char** argv) {
         float l, b, r, t;
         if (!p.isSpike) { l = p.x - 15; r = p.x + 15; b = p.y - 15; t = p.y + 15; }
         else { l = p.x - 3; r = p.x + 3; b = p.y - 6; t = p.y + 6; }
-        // Check against the path at 0.25-unit steps (finer than the generator uses).
+        // Spikes: checked at the recorded steps only (what GD tests). Blocks: also
+        // between steps, since solids push the player around.
         bool hit = false;
         for (size_t i = 1; i < path.size() && !hit; i++) {
             auto const& a = path[i - 1]; auto const& c = path[i];
             if (std::fabs(c.x - a.x) > 60 || std::fabs(c.y - a.y) > 60) continue;
-            for (int k = 0; k <= 40 && !hit; k++) {
-                float tt = k / 40.f, sx = a.x + (c.x - a.x) * tt, sy = a.y + (c.y - a.y) * tt;
-                float hw = std::max(a.halfW, c.halfW), hh = std::max(a.halfH, c.halfH);
+            int sub = p.isSpike ? 0 : 40;
+            for (int k = 0; k <= sub && !hit; k++) {
+                float tt = sub ? k / static_cast<float>(sub) : 1.f;
+                float sx = a.x + (c.x - a.x) * tt, sy = a.y + (c.y - a.y) * tt;
+                // A step's own hitbox for spikes; the larger of the two between steps.
+                float hw = sub ? std::max(a.halfW, c.halfW) : c.halfW;
+                float hh = sub ? std::max(a.halfH, c.halfH) : c.halfH;
                 if (p.isSpike) {
                     // Hazards: inclusive, like CCRect::intersectsRect (touching = death)
                     if (l <= sx + hw && sx - hw <= r && b <= sy + hh && sy - hh <= t) hit = true;
