@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.14.2",
+	"version": "v1.15.0",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -295,6 +295,12 @@
 			"name": "Showcase Bot (real play)",
 			"description": "Replay the clicks saved in the editor when you play the level for real, for showcase videos.\n<cr>Safe mode is forced while this is on</c>: progress stays at 0%, completions, stars, attempts and jumps are not saved, and the level can't be verified.",
 			"default": false
+		},
+		"tap-takeover": {
+			"type": "bool",
+			"name": "Tap to Take Over (continue recording)",
+			"description": "Editor BOT playtests: tap the screen to stop the bot and keep playing yourself. The clicks before that point are kept and your new clicks are added from there, so you can record a level in several goes. When the saved clicks run out (the last recording was stopped, not ended by a death), control is handed back to you automatically.\nTurn off if you want taps to be ignored while the bot plays.",
+			"default": true
 		},
 		"check-speed": {
 			"type": "int",

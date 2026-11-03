@@ -207,6 +207,28 @@ namespace {
         if (g_s.botActive) botFire(layer->m_player1, 0);
     }
 
+    // Continue a recording: during an editor BOT playtest a tap (or reaching the end
+    // of the saved clicks) stops the bot and records from that point on. The clicks
+    // before it are kept, so a long level can be recorded in several goes.
+    bool canTakeOver() {
+        return g_s.where == Where::Editor && g_s.botActive && !g_checking && !g_simming &&
+               Mod::get()->getSettingValue<bool>("tap-takeover");
+    }
+
+    void takeOver(char const* msg) {
+        int cur = g_s.aligned ? g_s.count - g_s.offset : 0;
+        pb::Macro m = g_s.replay ? *g_s.replay : pb::Macro{};
+        std::vector<pb::InputEvent> kept;
+        for (auto const& e : m.inputs) if (e.step <= cur) kept.push_back(e);
+        m.inputs = std::move(kept);
+        m.endStep = cur;
+        g_recMacro = m;
+        g_s.botActive = false;
+        g_s.recordInputs = true;
+        g_p2Pending.clear();
+        notify(msg, NotificationIcon::Info);
+    }
+
     // Called after every physics step of the session's player 1.
     void onStep(PlayerObject* p) {
         if (g_s.dead) return;
@@ -214,8 +236,8 @@ namespace {
         g_s.count++;
 
         if (g_s.recordInputs) {
-            if (g_s.count == 1) { g_recMacro.x0 = p->getPositionX(); g_recMacro.hasX0 = true; }
-            g_recMacro.endStep = g_s.count;
+            if (g_s.count == 1 && !g_recMacro.hasX0) { g_recMacro.x0 = p->getPositionX(); g_recMacro.hasX0 = true; }
+            g_recMacro.endStep = g_s.count - g_s.offset;
         }
 
         if (g_s.botActive) {
@@ -233,6 +255,12 @@ namespace {
             }
             if (g_s.aligned) botFire(p, g_s.count - g_s.offset);
             if (g_simming && g_s.aligned) simStep(p, g_s.count - g_s.offset);
+            // Past the end of the saved clicks: hand control back to the player so the
+            // recording can simply be continued from here.
+            if (g_s.aligned && canTakeOver() && g_s.replay && g_s.index >= g_s.replay->inputs.size() &&
+                g_s.count - g_s.offset >= g_s.replay->endStep) {
+                takeOver("Saved clicks ended - your turn, keep playing to continue the recording.");
+            }
         }
     }
 
@@ -288,11 +316,11 @@ namespace {
     void recordInput(PlayerObject* p, bool down) {
         if (!g_s.recordInputs || g_s.botActive || !p) return;
         if (p == sessionPlayer()) {
-            g_recMacro.inputs.push_back({g_s.count, down, p->getPositionX(), false});
+            g_recMacro.inputs.push_back({g_s.count - g_s.offset, down, p->getPositionX(), false});
         } else if (p == sessionPlayer2() && twoPlayerLevel(g_s.layer)) {
             // Only 2-player levels give player 2 its own clicks; otherwise its
             // presses just mirror player 1's and replay mirrors them the same way.
-            g_recMacro.inputs.push_back({g_s.count, down, p->getPositionX(), true});
+            g_recMacro.inputs.push_back({g_s.count - g_s.offset, down, p->getPositionX(), true});
         }
     }
 
@@ -354,7 +382,10 @@ class $modify(PBPlayerObject, PlayerObject) {
         bool jump = button == PlayerButton::Jump;
         bool mine = jump && this == sessionPlayer();
         bool mine2 = jump && !mine && this == sessionPlayer2();
-        if ((mine || mine2) && g_s.botActive && !g_injecting) return false;
+        if ((mine || mine2) && g_s.botActive && !g_injecting) {
+            if (!canTakeOver()) return false;
+            takeOver("Took over - recording from here, earlier clicks kept.");
+        }
         bool ret = PlayerObject::pushButton(button);
         if (mine) {
             g_holding = true;
@@ -424,6 +455,9 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         g_recording = true;
         g_stoppedByDeath = false;
 
+        g_recDtSum = 0.0;
+        g_recFrames = 0;
+        g_recMacro.clear();
         bool bot = g_botEnabled && !g_macro.empty();
         if (bot) {
             notify(fmt::format("Bot: replaying {} clicks.", g_macro.inputs.size()), NotificationIcon::Info);
@@ -473,6 +507,7 @@ class $modify(PBEditorLayer, LevelEditorLayer) {
         if (wasHandRun && !g_recMacro.empty()) {
             if (g_recFrames > 0) g_recMacro.frameDt = static_cast<float>(g_recDtSum / g_recFrames);
             if (g_recDtSum > 0.0) g_recMacro.tps = static_cast<float>(g_recMacro.endStep / g_recDtSum);
+            if (!g_macroKey.empty() && !g_macro.empty()) g_macro.save(macroPath(g_macroKey + ".prev"));
             g_macro = g_recMacro;
             if (!g_macroKey.empty()) g_macro.save(macroPath(g_macroKey));
         }
@@ -500,7 +535,7 @@ class $modify(PBGameLayer, GJBaseGameLayer) {
         bool checkRun = (g_checking || g_simming) && lel && static_cast<GJBaseGameLayer*>(lel) == this &&
                         lel->m_playbackMode == PlaybackMode::Playing;
         if (!checkRun) {
-            if (g_s.where == Where::Editor && g_s.recordInputs && g_s.layer == this && dt > 0.f) {
+            if (g_s.where == Where::Editor && g_s.layer == this && dt > 0.f) {
                 g_recDtSum += dt;
                 g_recFrames++;
             }
