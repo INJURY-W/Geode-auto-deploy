@@ -367,6 +367,8 @@ namespace {
         st.sawSpacing = pixels("saw-spacing");
         st.sawScale = static_cast<float>(mod->getSettingValue<double>("saw-size"));
         st.spikeScale = static_cast<float>(mod->getSettingValue<double>("spike-size"));
+        st.orbChance = static_cast<float>(mod->getSettingValue<int64_t>("orb-chance")) / 100.f;
+        st.orbScale = static_cast<float>(mod->getSettingValue<double>("orb-size"));
         st.seed = std::random_device{}();
         return st;
     }
@@ -1126,6 +1128,28 @@ class $modify(PBEditorUI, EditorUI) {
             }
             if (settings.saws.empty()) {
                 notify("Saw Object IDs: none of these objects could be created - using spikes only.", NotificationIcon::Warning);
+            }
+        }
+
+        // Orbs as obstacles (tight style): the ones picked in SET, trigger box read from the game.
+        if (settings.style == pb::Style::Tight && settings.orbChance > 0.f) {
+            std::vector<int> ids;
+            static constexpr std::pair<char const*, int> kOrbs[] = {
+                {"orb-yellow", 36}, {"orb-pink", 141}, {"orb-red", 1333}, {"orb-blue", 84},
+                {"orb-green", 1022}, {"orb-black", 1330}, {"orb-dash", 1704}, {"orb-dash-pink", 1751},
+            };
+            for (auto const& [key, id] : kOrbs) if (Mod::get()->getSettingValue<bool>(key)) ids.push_back(id);
+            std::stringstream extra(Mod::get()->getSettingValue<std::string>("orb-extra-ids"));
+            std::string tok;
+            while (std::getline(extra, tok, ',')) { int id = std::atoi(tok.c_str()); if (id > 0) ids.push_back(id); }
+            for (int id : ids) {
+                auto probe = GameObject::createWithKey(id);
+                if (!probe) continue;
+                probe->setPosition({0.f, 0.f});
+                auto r = probe->getObjectRect();
+                float hw = r.size.width * 0.5f, hh = r.size.height * 0.5f;
+                if (!(hw > 2.f && hw < 60.f && hh > 2.f && hh < 60.f)) hw = hh = 18.f;   // GD orbs: 36 x 36
+                settings.orbs.push_back({id, hw, hh});
             }
         }
 

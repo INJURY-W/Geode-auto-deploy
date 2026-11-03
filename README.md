@@ -51,6 +51,8 @@ SET의 **Showcase Bot (real play)**를 켜면 레벨을 실제로 플레이할 �
 - **Tight Pattern**: `chain`(기본, 정돈된 배치: 같은 크기 톱니를 일정 간격으로 위아래 엇갈려 놓고 그 사이를 같은 크기 미니 가시로 촘촘히 채움) / `random`(예전처럼 톱니·가시 랜덤 섞기, 크기도 랜덤)
 - **Saw Spacing (px)**: chain에서 한쪽 줄의 톱니 사이 간격 (톱니 지름 정도로 하면 톱니가 붙은 사슬, 0 = 톱니 없음)
 - **Saw Size / Spike Size**: chain에서 모든 톱니·가시의 크기 (가시 기본 0.5 = 미니)
+- **Orb Obstacles (%)**: tight에서 가시 자리 중 이 비율만큼 오브를 대신 놓음 (0 = 안 놓음). 오브도 경로에 바짝 붙되 절대 겹치지 않게 놓여서, 녹화한 그대로면 아무 영향 없고 한 단계라도 어긋나면 오브에 닿아 튕겨나감
+- **오브 종류**: Yellow / Pink / Red / Blue / Green / Black / Green Dash / Pink Dash 켜고 끄기, **Extra Orb IDs**로 다른 오브 ID 추가, **Orb Size**로 크기
 - **Saw Chance (%)**: random에서 가시 사이사이에 톱니가 섞이는 비율 (0 = 가시만)
 - **Saw Object IDs**: 쓸 톱니 ID 목록 (기본 88,89,98, chain은 첫 번째만 사용). 원형 판정 크기는 게임에서 읽어옴
 - **Min / Max Size**: random에서 가시·톱니 크기를 이 범위에서 랜덤으로 (둘 다 1이면 기본 크기)

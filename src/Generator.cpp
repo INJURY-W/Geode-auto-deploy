@@ -379,10 +379,14 @@ public:
                 x1 = std::max(x1, m_samples[j].x);
                 j++;
             }
-            if (m_st.chain) { chainSegment(x0, x1, step); i = j; continue; }
+            if (m_st.chain) { chainSegment(x0, x1, step, rng); i = j; continue; }
             for (float x = x0; x <= x1 + 0.01f; x += step) {
                 for (bool ceiling : {true, false}) {
                     float scale = randScale();
+                    if (!m_st.orbs.empty() && u01(rng) < m_st.orbChance) {
+                        auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
+                        if (placeOrb(x, o, m_st.orbScale, ceiling)) continue;
+                    }
                     bool saw = !m_st.saws.empty() && u01(rng) < m_st.sawChance;
                     if (saw) {
                         auto const& d = m_st.saws[rng() % m_st.saws.size()];
@@ -399,7 +403,8 @@ public:
     // Chain pattern for one stretch [x0, x1]: per side, first a row of identical saws
     // at an even spacing (the top row shifted half a step so they zig-zag), then
     // identical small spikes at Spike Spacing everywhere a saw doesn't cover.
-    void chainSegment(float x0, float x1, float step) {
+    void chainSegment(float x0, float x1, float step, std::mt19937& rng) {
+        std::uniform_real_distribution<float> u01(0.f, 1.f);
         bool haveSaw = !m_st.saws.empty() && m_st.sawSpacing > 0.f;
         float sawStep = std::max(6.f, m_st.sawSpacing);
         for (bool ceiling : {false, true}) {
@@ -413,14 +418,50 @@ public:
                 }
             }
             float sw = 15.f * m_st.spikeScale;   // half the spike's drawn width
+            float orbEnd = -1e9f;                // spots up to here are covered by the last orb
             for (float x = x0; x <= x1 + 0.01f; x += step) {
-                bool covered = false;
+                bool covered = x < orbEnd;
                 for (auto const& [sx, R] : saws) {
                     if (std::fabs(x - sx) < R * 0.85f + sw * 0.5f) { covered = true; break; }
                 }
-                if (!covered) placeScaledSpike(x, m_st.spikeScale, ceiling);
+                if (covered) continue;
+                if (!m_st.orbs.empty() && u01(rng) < m_st.orbChance) {
+                    auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
+                    float hw = o.halfW * m_st.orbScale;
+                    // Orb sits a half-width further on so it doesn't cover the spike before it.
+                    float ox = x + hw;
+                    bool hitsSaw = false;
+                    for (auto const& [sx, R] : saws) if (std::fabs(ox - sx) < R + hw) { hitsSaw = true; break; }
+                    if (!hitsSaw && ox <= x1 && placeOrb(ox, o, m_st.orbScale, ceiling)) {
+                        orbEnd = ox + hw + sw * 0.5f;
+                        continue;
+                    }
+                }
+                placeScaledSpike(x, m_st.spikeScale, ceiling);
             }
         }
+    }
+
+    // Orb (square trigger box) pushed against the path at column x, kept the gap away
+    // from every recorded step so the recorded run never touches it.
+    bool placeOrb(float x, Settings::OrbDef const& o, float scale, bool ceiling) {
+        float c = m_st.tightGap;
+        float hw = o.halfW * scale, hh = o.halfH * scale;
+        if (hw <= 0.f || hh <= 0.f) return false;
+        float lo = 1e9f, hi = -1e9f;
+        segmentExtremes(x - hw - c, x + hw + c, lo, hi);
+        if (hi < lo) return false;
+        float y = ceiling ? hi + c + hh + 0.01f : lo - c - hh - 0.01f;
+        if (!ceiling && y - hh < kGroundTop) return false;
+        Rect body{x - hw, y - hh, x + hw, y + hh};
+        if (insideSolid(body)) return false;
+        if (m_occupied.count(key(cellOf(x), cellOf(y)))) return false;
+        Placement p{o.id, x, y, 0.f, true};
+        p.scale = scale;
+        p.boxW = hw;
+        p.boxH = hh;
+        m_out.push_back(p);
+        return true;
     }
 
     // Spike (upright or hanging) pushed against the path at column x.
@@ -635,6 +676,8 @@ bool hitsPath(Placement const& p, std::vector<Sample> const& samples, Settings c
             float dx = std::max({l - p.x, 0.f, p.x - r});
             float dy = std::max({b - p.y, 0.f, p.y - t});
             if (dx * dx + dy * dy <= p.radius * p.radius) return true;
+        } else if (p.boxW > 0.f) {
+            if (p.x - p.boxW <= r && l <= p.x + p.boxW && p.y - p.boxH <= t && b <= p.y + p.boxH) return true;
         } else if (p.isSpike) {
             bool flip = std::fabs(p.rotation - 180.f) < 1.f;
             float hw = st.spikeHalfW * p.scale, hh = st.spikeHalfH * p.scale;

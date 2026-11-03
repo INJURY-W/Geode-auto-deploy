@@ -80,7 +80,8 @@ int main(int argc, char** argv) {
         st.saws = {{88, 16.f}, {89, 10.f}}; st.sawChance = 0.3f; st.sizeMin = 0.6f; st.sizeMax = 1.4f; st.seed = 7;
         st.chain = false; }
     if (style == "chain") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 6.f;
-        st.saws = {{88, 16.f}}; st.chain = true; st.sawSpacing = 90.f; st.sawScale = 1.2f; st.spikeScale = 0.5f; }
+        st.saws = {{88, 16.f}}; st.chain = true; st.sawSpacing = 90.f; st.sawScale = 1.2f; st.spikeScale = 0.5f;
+        st.orbs = {{36, 18.f, 18.f}, {84, 18.f, 18.f}}; st.orbChance = 0.15f; st.orbScale = 0.6f; }
     std::vector<SolidRect> solids;
     if (style == "tight" || style == "chain") {
         // A few of the player's own blocks along the cube part (the step it jumps onto).
@@ -107,7 +108,10 @@ int main(int argc, char** argv) {
                 // A step's own hitbox for spikes; the larger of the two between steps.
                 float hw = sub ? std::max(a.halfW, c.halfW) : c.halfW;
                 float hh = sub ? std::max(a.halfH, c.halfH) : c.halfH;
-                if (p.radius > 0.f) {
+                if (p.boxW > 0.f) {
+                    // Orb: its trigger box, touching counts
+                    if (p.x - p.boxW <= sx + hw && sx - hw <= p.x + p.boxW && p.y - p.boxH <= sy + hh && sy - hh <= p.y + p.boxH) hit = true;
+                } else if (p.radius > 0.f) {
                     // Saw: circle vs player box, touching counts
                     float dx = std::max({sx - hw - p.x, 0.f, p.x - (sx + hw)});
                     float dy = std::max({sy - hh - p.y, 0.f, p.y - (sy + hh)});
@@ -123,11 +127,12 @@ int main(int argc, char** argv) {
         }
         if (hit) bad++;
     }
-    int blocks = 0, spikes = 0, saws = 0;
+    int blocks = 0, spikes = 0, saws = 0, orbsPlaced = 0;
     float smin = 9.f, smax = 0.f;
     for (auto const& p : out) {
         (p.isSpike ? spikes : blocks)++;
         if (p.radius > 0.f) saws++;
+        if (p.boxW > 0.f) orbsPlaced++;
         if (p.isSpike) { smin = std::min(smin, p.scale); smax = std::max(smax, p.scale); }
     }
     if (style == "tight") {
@@ -138,9 +143,10 @@ int main(int argc, char** argv) {
     if (std::getenv("PB_DUMP")) {
         FILE* f = std::fopen(std::getenv("PB_DUMP"), "w");
         for (auto const& s : path) std::fprintf(f, "P %f %f %f %f\n", s.x, s.y, s.halfW, s.halfH);
-        for (auto const& p : out) std::fprintf(f, "O %d %f %f %f %f %f %d\n", p.objectID, p.x, p.y, p.rotation, p.scale, p.radius, p.isSpike ? 1 : 0);
+        for (auto const& p : out) std::fprintf(f, "O %d %f %f %f %f %f %d\n", p.objectID, p.x, p.y, p.rotation, p.scale, p.radius, p.isSpike ? (p.boxW > 0.f ? 2 : 1) : 0);
         std::fclose(f);
     }
+    std::printf("orbs=%d saws=%d\n", orbsPlaced, saws);
     std::printf("style=%s samples=%zu blocks=%d spikes=%d collisions=%d\n",
                 style.c_str(), path.size(), blocks, spikes, bad);
 
