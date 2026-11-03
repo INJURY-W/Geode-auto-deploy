@@ -383,6 +383,18 @@ public:
             for (float x = x0; x <= x1 + 0.01f; x += step) {
                 for (bool ceiling : {true, false}) {
                     float scale = randScale();
+                    if (!m_st.orbs.empty() && u01(rng) < m_st.orbChance) {
+                        auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
+                        if (placeOrb(x, o, m_st.orbScale, ceiling)) {
+                            auto const& orb = m_out.back();
+                            float sh = 15.f * scale;
+                            float sy = ceiling ? orb.y + orb.boxH + sh : orb.y - orb.boxH - sh;
+                            Placement sp{m_st.spikeID, x, sy, ceiling ? 180.f : 0.f, true};
+                            sp.scale = scale;
+                            if (ceiling || sy - sh >= kGroundTop) m_out.push_back(sp);
+                            continue;
+                        }
+                    }
                     bool saw = !m_st.saws.empty() && u01(rng) < m_st.sawChance;
                     if (saw) {
                         auto const& d = m_st.saws[rng() % m_st.saws.size()];
@@ -400,11 +412,9 @@ public:
     // at an even spacing (the top row shifted half a step so they zig-zag), then
     // identical small spikes at Spike Spacing everywhere a saw doesn't cover.
     void chainSegment(float x0, float x1, float step, std::mt19937& rng) {
-        (void)rng;
-        // 1) Full rows of identical spikes - nothing takes their place.
-        for (bool ceiling : {false, true}) {
-            for (float x = x0; x <= x1 + 0.01f; x += step) placeScaledSpike(x, m_st.spikeScale, ceiling);
-        }
+        // 1) Rows of identical spikes; some spots become an orb (fitted to the path
+        //    exactly like a spike, with a spike right behind it).
+        for (bool ceiling : {false, true}) spikeRow(x0, x1, step, rng, ceiling, m_st.spikeScale);
         // 2) Saws (if on) at an even spacing just behind the spike rows, so they add to
         //    the layout without pushing any spike out.
         bool haveSaw = !m_st.saws.empty() && m_st.sawSpacing > 0.f && m_st.sawChance > 0.f;
@@ -416,6 +426,42 @@ public:
         for (bool ceiling : {false, true}) {
             float start = x0 + (ceiling ? sawStep * 0.5f : 0.f);
             for (float x = start; x <= x1 + 0.01f; x += sawStep) placeSaw(x, d.id, R, m_st.sawScale, ceiling, behind);
+        }
+    }
+
+    // One row of spikes along [x0, x1]. With Orb Traps on, a spot may take an orb
+    // instead: its box pushed against the path with the same gap as a spike (the run
+    // never touches it), plus a spike right behind it. A click while drifting into it
+    // fires the orb and the player hits that spike or the row across.
+    void spikeRow(float x0, float x1, float step, std::mt19937& rng, bool ceiling, float spikeScale) {
+        std::uniform_real_distribution<float> u01(0.f, 1.f);
+        bool orbsOn = !m_st.orbs.empty() && m_st.orbChance > 0.f;
+        float orbSpacing = std::max(0.f, m_st.orbSpacing);
+        float coveredTo = -1e9f;     // spike spots up to here sit under the last orb
+        float nextOrb = -1e9f;
+        for (float x = x0; x <= x1 + 0.01f; x += step) {
+            if (x < coveredTo) continue;
+            if (orbsOn && x >= nextOrb && u01(rng) < m_st.orbChance) {
+                auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
+                float hw = o.halfW * m_st.orbScale;
+                float ox = x + hw;               // orb starts at this spot
+                if (ox <= x1 + hw && placeOrb(ox, o, m_st.orbScale, ceiling)) {
+                    auto const& orb = m_out.back();
+                    // Spike right behind the orb (outer side), touching its box.
+                    float sh = 15.f * spikeScale;
+                    float sy = ceiling ? orb.y + orb.boxH + sh : orb.y - orb.boxH - sh;
+                    Rect body{ox - sh, sy - sh, ox + sh, sy + sh};
+                    if (!insideSolid(body) && (ceiling || sy - sh >= kGroundTop)) {
+                        Placement sp{m_st.spikeID, ox, sy, ceiling ? 180.f : 0.f, true};
+                        sp.scale = spikeScale;
+                        m_out.push_back(sp);
+                    }
+                    coveredTo = ox + hw;
+                    nextOrb = ox + hw + orbSpacing;
+                    continue;
+                }
+            }
+            placeScaledSpike(x, spikeScale, ceiling);
         }
     }
 
@@ -644,7 +690,6 @@ public:
         groundBlocks();
         if (m_st.style == Style::Tight) {
             tightCorridors();          // every gamemode, cube included
-            if (!m_st.orbs.empty() && m_st.orbChance > 0.f) innerOrbs();
         } else {
             corridors();
             jumpSpikes();
