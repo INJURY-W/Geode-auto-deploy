@@ -419,6 +419,51 @@ public:
         }
     }
 
+    // Orbs inside the corridor, centered on the path. A spot is only used if, at every
+    // recorded step whose hitbox (plus the gap) touches the orb, and the two steps
+    // before it, the button was not held - so the recorded run never sets it off.
+    void innerOrbs() {
+        std::mt19937 rng(m_st.seed ^ 0x9e3779b9u);
+        std::uniform_real_distribution<float> u01(0.f, 1.f);
+        float spacing = std::max(10.f, m_st.orbSpacing);
+        float gap = std::max(m_st.tightGap, m_st.portalGap);
+        float nextX = -1e9f;
+        size_t n = m_samples.size();
+        for (size_t i = 0; i < n; i++) {
+            auto const& s = m_samples[i];
+            if (!modeEnabled(s.mode, m_st) || s.x < nextX) continue;
+            if (u01(rng) >= m_st.orbChance) { nextX = s.x + spacing; continue; }
+            auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
+            float hw = o.halfW * m_st.orbScale, hh = o.halfH * m_st.orbScale;
+            Rect box{s.x - hw, s.y - hh, s.x + hw, s.y + hh};
+            if (!orbSpotSafe(box, gap) || insideSolid(box)) continue;   // try the next step
+            Placement p{o.id, s.x, s.y, 0.f, true};
+            p.scale = m_st.orbScale;
+            p.boxW = hw;
+            p.boxH = hh;
+            m_out.push_back(p);
+            nextX = s.x + spacing;
+        }
+    }
+
+    bool orbSpotSafe(Rect const& box, float gap) const {
+        std::unordered_set<size_t> seen;
+        for (int col = cellOf(box.l - gap - kPad); col <= cellOf(box.r + gap + kPad); col++) {
+            auto it = m_segColumns.find(col);
+            if (it == m_segColumns.end()) continue;
+            for (size_t k : it->second) {
+                if (!seen.insert(k).second) continue;
+                auto pr = playerRect(m_samples[k]).expanded(gap);
+                if (pr.r < box.l || pr.l > box.r || pr.t < box.b || pr.b > box.t) continue;
+                for (size_t back = 0; back <= 2 && back <= k; back++) {
+                    if (m_samples[k - back].holding) return false;
+                }
+                if (!modeEnabled(m_samples[k].mode, m_st)) return false;
+            }
+        }
+        return true;
+    }
+
     // Orb (square trigger box) pushed against the path at column x, kept the gap away
     // from every recorded step so the recorded run never touches it.
     bool placeOrb(float x, Settings::OrbDef const& o, float scale, bool ceiling) {
@@ -590,6 +635,7 @@ public:
         groundBlocks();
         if (m_st.style == Style::Tight) {
             tightCorridors();          // every gamemode, cube included
+            if (!m_st.orbs.empty() && m_st.orbChance > 0.f) innerOrbs();
         } else {
             corridors();
             jumpSpikes();

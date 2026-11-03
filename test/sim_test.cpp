@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
         st.chain = false; }
     if (style == "chain") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 6.f;
         st.saws = {{88, 16.f}}; st.chain = true; st.sawSpacing = 90.f; st.sawScale = 1.2f; st.spikeScale = 0.5f;
-        st.orbs = {{36, 18.f, 18.f}, {84, 18.f, 18.f}}; st.orbChance = 0.f; st.sawChance = 1.f; st.orbScale = 0.6f; }
+        st.orbs = {{36, 18.f, 18.f}, {84, 18.f, 18.f}}; st.orbChance = 0.5f; st.sawChance = 1.f; st.orbSpacing = 60.f; st.orbScale = 0.6f; }
     std::vector<SolidRect> solids;
     if (style == "tight" || style == "chain") {
         // A few of the player's own blocks along the cube part (the step it jumps onto).
@@ -109,8 +109,8 @@ int main(int argc, char** argv) {
                 float hw = sub ? std::max(a.halfW, c.halfW) : c.halfW;
                 float hh = sub ? std::max(a.halfH, c.halfH) : c.halfH;
                 if (p.boxW > 0.f) {
-                    // Orb: its trigger box, touching counts
-                    if (p.x - p.boxW <= sx + hw && sx - hw <= p.x + p.boxW && p.y - p.boxH <= sy + hh && sy - hh <= p.y + p.boxH) hit = true;
+                    // Orb: only a problem if the run is pressing while inside it
+                    if (c.holding && p.x - p.boxW <= sx + hw && sx - hw <= p.x + p.boxW && p.y - p.boxH <= sy + hh && sy - hh <= p.y + p.boxH) hit = true;
                 } else if (p.radius > 0.f) {
                     // Saw: circle vs player box, touching counts
                     float dx = std::max({sx - hw - p.x, 0.f, p.x - (sx + hw)});

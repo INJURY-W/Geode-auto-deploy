@@ -49,12 +49,14 @@ struct Settings {
     float sawSpacing = 60.f;    // units between saw centers on one side (0 = no saws)
     float sawScale = 1.f;
     float spikeScale = 0.5f;
-    // Orbs used as obstacles: placed against the path like spikes, never overlapping
-    // it, so the recorded run never touches them - but a click off by a step can.
+    // Orbs used as obstacles inside the corridor: right on the path, only where the
+    // recorded run isn't pressing while it overlaps them - a click there (one step
+    // off) sets the orb off and throws the player into the spikes.
     struct OrbDef { int id; float halfW, halfH; };   // trigger box at scale 1 (from the game)
     std::vector<OrbDef> orbs;
     float orbChance = 0.f;      // 0..1, share of spike spots that become an orb
     float orbScale = 1.f;
+    float orbSpacing = 60.f;    // units between orb spots along the path
     uint32_t seed = 1;
     int blockID = 1;
     int spikeID = 8;
