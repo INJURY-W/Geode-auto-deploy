@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.17.2",
+	"version": "v1.17.3",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -187,7 +187,7 @@
 		"orb-chance": {
 			"type": "int",
 			"name": "Orb Traps (%)",
-			"description": "Tight style: chance that a spike spot in the rows becomes an orb instead. The orb's box is pushed against your path exactly like a spike (same Tight Gap, the recorded run never touches it) and a spike is put right behind it. Drift into it with a click and the orb fires straight into the spikes. 0 = no orbs.",
+			"description": "Tight style: orbs added to the spike rows (no spike is removed). Each orb's box is pushed against your path exactly like a spike (same Tight Gap, the recorded run never touches it), with a spike right behind it. Drift into it with a click and the orb fires straight into the spikes. This is the chance per spike spot. 0 = no orbs.",
 			"default": 0,
 			"min": 0,
 			"max": 100,

@@ -392,7 +392,6 @@ public:
                             Placement sp{m_st.spikeID, x, sy, ceiling ? 180.f : 0.f, true};
                             sp.scale = scale;
                             if (ceiling || sy - sh >= kGroundTop) m_out.push_back(sp);
-                            continue;
                         }
                     }
                     bool saw = !m_st.saws.empty() && u01(rng) < m_st.sawChance;
@@ -429,18 +428,17 @@ public:
         }
     }
 
-    // One row of spikes along [x0, x1]. With Orb Traps on, a spot may take an orb
-    // instead: its box pushed against the path with the same gap as a spike (the run
+    // One row of spikes along [x0, x1]. With Orb Traps on, orbs are added on top of
+    // the row (no spike is removed): each orb's box pushed against the path with the same gap as a spike (the run
     // never touches it), plus a spike right behind it. A click while drifting into it
     // fires the orb and the player hits that spike or the row across.
     void spikeRow(float x0, float x1, float step, std::mt19937& rng, bool ceiling, float spikeScale) {
         std::uniform_real_distribution<float> u01(0.f, 1.f);
         bool orbsOn = !m_st.orbs.empty() && m_st.orbChance > 0.f;
         float orbSpacing = std::max(0.f, m_st.orbSpacing);
-        float coveredTo = -1e9f;     // spike spots up to here sit under the last orb
         float nextOrb = -1e9f;
         for (float x = x0; x <= x1 + 0.01f; x += step) {
-            if (x < coveredTo) continue;
+            placeScaledSpike(x, spikeScale, ceiling);   // the spike row always stays complete
             if (orbsOn && x >= nextOrb && u01(rng) < m_st.orbChance) {
                 auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
                 float hw = o.halfW * m_st.orbScale;
@@ -456,12 +454,9 @@ public:
                         sp.scale = spikeScale;
                         m_out.push_back(sp);
                     }
-                    coveredTo = ox + hw;
                     nextOrb = ox + hw + orbSpacing;
-                    continue;
                 }
             }
-            placeScaledSpike(x, spikeScale, ceiling);
         }
     }
 
