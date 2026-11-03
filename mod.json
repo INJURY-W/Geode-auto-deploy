@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.16.0",
+	"version": "v1.16.1",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -263,6 +263,14 @@
 			"name": "Extra Orb IDs",
 			"description": "Other orb object IDs to mix in, comma separated (e.g. spider or toggle orbs).",
 			"default": ""
+		},
+		"orb-group": {
+			"type": "int",
+			"name": "Obstacle Orb Group ID",
+			"description": "Group ID given to the obstacle orbs AUTO places. SIM never presses orbs in this group (so it only presses the orbs you placed to be hit). You can also use it to move or hide them all at once. 0 = no group.",
+			"default": 9999,
+			"min": 0,
+			"max": 9999
 		},
 		"saw-chance": {
 			"type": "int",

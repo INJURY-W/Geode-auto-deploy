@@ -92,6 +92,8 @@ namespace {
     std::vector<SimOrb> g_simOrbs;
     int g_simReleaseAt = -1;                  // end the orb tap on this step
     int g_simLastStep = 0;
+    int g_simSkipped = 0;                     // obstacle orbs left alone
+    bool g_simFromSelection = false;
     void finishSim();
     void simStep(PlayerObject* p, int step);
 
@@ -867,8 +869,36 @@ class $modify(PBEditorUI, EditorUI) {
             return;
         }
         g_simOrbs.clear();
-        if (auto objs = m_editorLayer->m_objects) {
-            for (auto obj : CCArrayExt<GameObject*>(objs)) {
+        // Which orbs SIM may press: the selected ones if any orb is selected, otherwise
+        // every orb except the obstacle orbs AUTO placed (marked with the obstacle group).
+        int obstacleGroup = static_cast<int>(Mod::get()->getSettingValue<int64_t>("orb-group"));
+        auto isOrb = [](GameObject* obj) {
+            switch (obj->m_objectType) {
+                case GameObjectType::YellowJumpRing: case GameObjectType::PinkJumpRing:
+                case GameObjectType::GravityRing: case GameObjectType::GreenRing:
+                case GameObjectType::DropRing: case GameObjectType::RedJumpRing:
+                case GameObjectType::CustomRing: case GameObjectType::DashRing:
+                case GameObjectType::GravityDashRing: case GameObjectType::SpiderOrb:
+                case GameObjectType::TeleportOrb: return true;
+                default: return false;
+            }
+        };
+        CCArray* source = m_editorLayer->m_objects;
+        bool fromSelection = false;
+        if (auto sel = this->getSelectedObjects()) {
+            for (auto obj : CCArrayExt<GameObject*>(sel)) {
+                if (isOrb(obj)) { fromSelection = true; break; }
+            }
+            if (fromSelection) source = sel;
+        }
+        g_simSkipped = 0;
+        if (source) {
+            for (auto obj : CCArrayExt<GameObject*>(source)) {
+                if (!isOrb(obj)) continue;
+                if (!fromSelection && obstacleGroup > 0 && obj->belongsToGroup(obstacleGroup)) {
+                    g_simSkipped++;
+                    continue;
+                }
                 switch (obj->m_objectType) {
                     case GameObjectType::YellowJumpRing: case GameObjectType::PinkJumpRing:
                     case GameObjectType::GravityRing: case GameObjectType::GreenRing:
@@ -884,8 +914,9 @@ class $modify(PBEditorUI, EditorUI) {
                 g_simOrbs.push_back({r, r.getMidX(), dash, false});
             }
         }
+        g_simFromSelection = fromSelection;
         if (g_simOrbs.empty()) {
-            notify("No orbs in the level - place some first.", NotificationIcon::Warning);
+            notify("No orbs to press - place some first (obstacle orbs from AUTO are never pressed).", NotificationIcon::Warning);
             return;
         }
         std::sort(g_simOrbs.begin(), g_simOrbs.end(), [](auto const& a, auto const& b) { return a.x < b.x; });
@@ -925,6 +956,8 @@ class $modify(PBEditorUI, EditorUI) {
             missed += fmt::format("- orb #{} at {:.1f} blocks\n", i + 1, g_simOrbs[i].x / 30.f);
         }
         std::string text = fmt::format("# Tapped {} / {} orbs\n\n", used, g_simOrbs.size());
+        if (g_simFromSelection) text += "Only the **selected** orbs were used.\n\n";
+        else if (g_simSkipped > 0) text += fmt::format("{} obstacle orbs (from AUTO) were left alone.\n\n", g_simSkipped);
         if (g_simDied) text += "**The player died** before the end - the new recording stops there. "
                                "Re-record that part by hand or move the orbs.\n\n";
         text += "The run (orb taps included) is now the saved recording: press **AUTO** to place spikes "
@@ -1192,6 +1225,11 @@ class $modify(PBEditorUI, EditorUI) {
             if (std::fabs(p.scale - 1.f) > 0.001f) {
                 obj->updateCustomScaleX(p.scale);
                 obj->updateCustomScaleY(p.scale);
+            }
+            // Obstacle orbs get a marker group so SIM never presses them.
+            if (p.boxW > 0.f) {
+                int g = static_cast<int>(Mod::get()->getSettingValue<int64_t>("orb-group"));
+                if (g > 0) obj->addToGroup(g);
             }
             created->addObject(obj);
             (p.isSpike ? spikes : blocks)++;
