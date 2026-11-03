@@ -383,10 +383,6 @@ public:
             for (float x = x0; x <= x1 + 0.01f; x += step) {
                 for (bool ceiling : {true, false}) {
                     float scale = randScale();
-                    if (!m_st.orbs.empty() && u01(rng) < m_st.orbChance) {
-                        auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
-                        if (placeOrb(x, o, m_st.orbScale, ceiling)) continue;
-                    }
                     bool saw = !m_st.saws.empty() && u01(rng) < m_st.sawChance;
                     if (saw) {
                         auto const& d = m_st.saws[rng() % m_st.saws.size()];
@@ -404,41 +400,22 @@ public:
     // at an even spacing (the top row shifted half a step so they zig-zag), then
     // identical small spikes at Spike Spacing everywhere a saw doesn't cover.
     void chainSegment(float x0, float x1, float step, std::mt19937& rng) {
-        std::uniform_real_distribution<float> u01(0.f, 1.f);
-        bool haveSaw = !m_st.saws.empty() && m_st.sawSpacing > 0.f;
-        float sawStep = std::max(6.f, m_st.sawSpacing);
+        (void)rng;
+        // 1) Full rows of identical spikes - nothing takes their place.
         for (bool ceiling : {false, true}) {
-            std::vector<std::pair<float, float>> saws;   // x, radius
-            if (haveSaw) {
-                auto const& d = m_st.saws.front();
-                float R = d.radius * m_st.sawScale;
-                float start = x0 + (ceiling ? sawStep * 0.5f : 0.f);
-                for (float x = start; x <= x1 + 0.01f; x += sawStep) {
-                    if (placeSaw(x, d.id, R, m_st.sawScale, ceiling)) saws.push_back({x, R});
-                }
-            }
-            float sw = 15.f * m_st.spikeScale;   // half the spike's drawn width
-            float orbEnd = -1e9f;                // spots up to here are covered by the last orb
-            for (float x = x0; x <= x1 + 0.01f; x += step) {
-                bool covered = x < orbEnd;
-                for (auto const& [sx, R] : saws) {
-                    if (std::fabs(x - sx) < R * 0.85f + sw * 0.5f) { covered = true; break; }
-                }
-                if (covered) continue;
-                if (!m_st.orbs.empty() && u01(rng) < m_st.orbChance) {
-                    auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
-                    float hw = o.halfW * m_st.orbScale;
-                    // Orb sits a half-width further on so it doesn't cover the spike before it.
-                    float ox = x + hw;
-                    bool hitsSaw = false;
-                    for (auto const& [sx, R] : saws) if (std::fabs(ox - sx) < R + hw) { hitsSaw = true; break; }
-                    if (!hitsSaw && ox <= x1 && placeOrb(ox, o, m_st.orbScale, ceiling)) {
-                        orbEnd = ox + hw + sw * 0.5f;
-                        continue;
-                    }
-                }
-                placeScaledSpike(x, m_st.spikeScale, ceiling);
-            }
+            for (float x = x0; x <= x1 + 0.01f; x += step) placeScaledSpike(x, m_st.spikeScale, ceiling);
+        }
+        // 2) Saws (if on) at an even spacing just behind the spike rows, so they add to
+        //    the layout without pushing any spike out.
+        bool haveSaw = !m_st.saws.empty() && m_st.sawSpacing > 0.f && m_st.sawChance > 0.f;
+        if (!haveSaw) return;
+        float sawStep = std::max(6.f, m_st.sawSpacing);
+        float behind = 30.f * m_st.spikeScale;   // a spike's full drawn height
+        auto const& d = m_st.saws.front();
+        float R = d.radius * m_st.sawScale;
+        for (bool ceiling : {false, true}) {
+            float start = x0 + (ceiling ? sawStep * 0.5f : 0.f);
+            for (float x = start; x <= x1 + 0.01f; x += sawStep) placeSaw(x, d.id, R, m_st.sawScale, ceiling, behind);
         }
     }
 
@@ -486,9 +463,9 @@ public:
 
     // Saw (round hitbox of radius R) pushed against the path at column x: its center
     // goes just far enough that the circle stays the gap away from every recorded step.
-    bool placeSaw(float x, int id, float R, float scale, bool ceiling) {
+    bool placeSaw(float x, int id, float R, float scale, bool ceiling, float extra = 0.f) {
         if (R <= 0.f) return false;
-        float c = m_st.tightGap;
+        float c = m_st.tightGap + extra;
         bool any = false;
         float need = ceiling ? -1e9f : 1e9f;
         auto constrain = [&](Rect const& pr) {

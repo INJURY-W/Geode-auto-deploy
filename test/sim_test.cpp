@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
         st.chain = false; }
     if (style == "chain") { st.style = Style::Tight; st.tightGap = 0.2f; st.spikeSpacing = 6.f;
         st.saws = {{88, 16.f}}; st.chain = true; st.sawSpacing = 90.f; st.sawScale = 1.2f; st.spikeScale = 0.5f;
-        st.orbs = {{36, 18.f, 18.f}, {84, 18.f, 18.f}}; st.orbChance = 0.15f; st.orbScale = 0.6f; }
+        st.orbs = {{36, 18.f, 18.f}, {84, 18.f, 18.f}}; st.orbChance = 0.f; st.sawChance = 1.f; st.orbScale = 0.6f; }
     std::vector<SolidRect> solids;
     if (style == "tight" || style == "chain") {
         // A few of the player's own blocks along the cube part (the step it jumps onto).

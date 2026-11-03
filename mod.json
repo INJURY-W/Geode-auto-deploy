@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.16.1",
+	"version": "v1.16.2",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -133,7 +133,7 @@
 		"tight-pattern": {
 			"type": "string",
 			"name": "Tight Pattern",
-			"description": "<cy>chain</c>: neat rows - identical saws at an even spacing along each side (top row shifted half a step), identical small spikes packed in between.\n<cy>random</c>: saws and spikes mixed at random with random sizes (Saw Chance, Min/Max Size).",
+			"description": "<cy>chain</c>: neat rows - full rows of identical small spikes against the path, with identical saws at an even spacing right behind them (top row shifted half a step).\n<cy>random</c>: saws and spikes mixed at random with random sizes (Saw Chance, Min/Max Size).",
 			"default": "chain",
 			"one-of": [
 				"chain",
@@ -143,7 +143,7 @@
 		"saw-spacing": {
 			"type": "float",
 			"name": "Saw Spacing (px)",
-			"description": "Chain pattern: distance between saw centers on one side, in pixels (30 px = 1 block). About the saw's diameter makes a touching chain. 0 = no saws.",
+			"description": "Chain pattern: distance between saw centers on one side, in pixels (30 px = 1 block). Saws sit just behind the spike rows and never replace a spike. 0 = no saws.",
 			"default": 90.0,
 			"min": 0.0,
 			"max": 300.0,
@@ -184,98 +184,10 @@
 				"input": true
 			}
 		},
-		"orb-chance": {
-			"type": "int",
-			"name": "Orb Obstacles (%)",
-			"description": "Tight style: share of spike spots that get an orb instead. Orbs are placed against the path like spikes and never overlap it, so your recorded run is unaffected - but a click off by even one step can touch one and throw the player off. 0 = no orbs. Pick the orbs below.",
-			"default": 0,
-			"min": 0,
-			"max": 100,
-			"control": {
-				"slider": true,
-				"input": true
-			}
-		},
-		"orb-size": {
-			"type": "float",
-			"name": "Orb Size",
-			"description": "Scale of the obstacle orbs (1 = normal).",
-			"default": 1.0,
-			"min": 0.2,
-			"max": 3.0,
-			"control": {
-				"arrow-step": 0.1,
-				"slider": true,
-				"slider-step": 0.05,
-				"input": true
-			}
-		},
-		"orb-yellow": {
-			"type": "bool",
-			"name": "Yellow Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": true
-		},
-		"orb-pink": {
-			"type": "bool",
-			"name": "Pink Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": false
-		},
-		"orb-red": {
-			"type": "bool",
-			"name": "Red Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": false
-		},
-		"orb-blue": {
-			"type": "bool",
-			"name": "Blue Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": false
-		},
-		"orb-green": {
-			"type": "bool",
-			"name": "Green Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": false
-		},
-		"orb-black": {
-			"type": "bool",
-			"name": "Black Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": false
-		},
-		"orb-dash": {
-			"type": "bool",
-			"name": "Green Dash Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": false
-		},
-		"orb-dash-pink": {
-			"type": "bool",
-			"name": "Pink Dash Orb",
-			"description": "Orbs as obstacles: use this orb.",
-			"default": false
-		},
-		"orb-extra-ids": {
-			"type": "string",
-			"name": "Extra Orb IDs",
-			"description": "Other orb object IDs to mix in, comma separated (e.g. spider or toggle orbs).",
-			"default": ""
-		},
-		"orb-group": {
-			"type": "int",
-			"name": "Obstacle Orb Group ID",
-			"description": "Group ID given to the obstacle orbs AUTO places. SIM never presses orbs in this group (so it only presses the orbs you placed to be hit). You can also use it to move or hide them all at once. 0 = no group.",
-			"default": 9999,
-			"min": 0,
-			"max": 9999
-		},
 		"saw-chance": {
 			"type": "int",
-			"name": "Saw Chance (%, random)",
-			"description": "Random pattern only. Share of spots that get a saw instead of a spike. 0 = spikes only.",
+			"name": "Saws (%)",
+			"description": "Tight style. 0 = no saws at all. Chain pattern: any value above 0 turns the saw rows on (Saw Spacing sets how many). Random pattern: share of spots that get a saw.",
 			"default": 25,
 			"min": 0,
 			"max": 100,
