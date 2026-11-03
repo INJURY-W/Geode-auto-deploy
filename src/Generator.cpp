@@ -419,30 +419,39 @@ public:
         }
     }
 
-    // Orbs inside the corridor, centered on the path. A spot is only used if, at every
+    // Orb rows above and below the path, like the spike rows, but sitting half over
+    // the path so the player passes inside them. A spot is only used if, at every
     // recorded step whose hitbox (plus the gap) touches the orb, and the two steps
     // before it, the button was not held - so the recorded run never sets it off.
     void innerOrbs() {
         std::mt19937 rng(m_st.seed ^ 0x9e3779b9u);
         std::uniform_real_distribution<float> u01(0.f, 1.f);
-        float spacing = std::max(10.f, m_st.orbSpacing);
         float gap = std::max(m_st.tightGap, m_st.portalGap);
         float nextX = -1e9f;
         size_t n = m_samples.size();
         for (size_t i = 0; i < n; i++) {
             auto const& s = m_samples[i];
             if (!modeEnabled(s.mode, m_st) || s.x < nextX) continue;
-            if (u01(rng) >= m_st.orbChance) { nextX = s.x + spacing; continue; }
-            auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
-            float hw = o.halfW * m_st.orbScale, hh = o.halfH * m_st.orbScale;
-            Rect box{s.x - hw, s.y - hh, s.x + hw, s.y + hh};
-            if (!orbSpotSafe(box, gap) || insideSolid(box)) continue;   // try the next step
-            Placement p{o.id, s.x, s.y, 0.f, true};
-            p.scale = m_st.orbScale;
-            p.boxW = hw;
-            p.boxH = hh;
-            m_out.push_back(p);
-            nextX = s.x + spacing;
+            float slot = 0.f;
+            for (bool ceiling : {false, true}) {
+                if (u01(rng) >= m_st.orbChance) continue;
+                auto const& o = m_st.orbs[rng() % m_st.orbs.size()];
+                float hw = o.halfW * m_st.orbScale, hh = o.halfH * m_st.orbScale;
+                slot = std::max(slot, 2.f * hw);
+                // Center a bit off the path toward its side: the box still covers the
+                // player's center line, the orb reads as part of the top/bottom row.
+                float cy = s.y + (ceiling ? 1.f : -1.f) * hh * 0.6f;
+                Rect box{s.x - hw, cy - hh, s.x + hw, cy + hh};
+                if (!ceiling && box.b < kGroundTop) continue;
+                if (!orbSpotSafe(box, gap) || insideSolid(box)) continue;
+                Placement p{o.id, s.x, cy, 0.f, true};
+                p.scale = m_st.orbScale;
+                p.boxW = hw;
+                p.boxH = hh;
+                m_out.push_back(p);
+            }
+            float step = m_st.orbSpacing > 0.f ? m_st.orbSpacing : slot;
+            nextX = s.x + std::max(step, 6.f);
         }
     }
 

@@ -5,7 +5,7 @@
 	},
 	"id": "heum.path-builder",
 	"name": "Path Builder",
-	"version": "v1.17.0",
+	"version": "v1.17.1",
 	"developer": "REVOLVE",
 	"description": "Records your editor playtest path and auto-places blocks and spikes around it.",
 	"dependencies": {
@@ -187,7 +187,7 @@
 		"orb-chance": {
 			"type": "int",
 			"name": "Orb Traps (%)",
-			"description": "Tight style: orbs placed right on your path inside the spike corridor, only where your recorded run passes through without pressing. Play it as recorded and they do nothing; press there (a click one step off) and the orb fires and throws you into the spikes. This is the chance per spot (Orb Spacing). 0 = no orbs.",
+			"description": "Tight style: rows of orbs above and below your path, like the spike rows, sitting half over the path so you pass inside them. Only placed where your recorded run passes through without pressing: play it as recorded and they do nothing; press there (a click one step off) and the orb fires and throws you into the spikes. This is the chance per spot. 0 = no orbs.",
 			"default": 0,
 			"min": 0,
 			"max": 100,
@@ -199,9 +199,9 @@
 		"orb-spacing": {
 			"type": "float",
 			"name": "Orb Spacing (px)",
-			"description": "Least distance between two orbs along the path (30 px = 1 block).",
-			"default": 60.0,
-			"min": 10.0,
+			"description": "Distance between orbs along the path (30 px = 1 block). 0 = side by side, a solid row like the spikes.",
+			"default": 0.0,
+			"min": 0.0,
 			"max": 600.0,
 			"control": {
 				"arrow-step": 5.0,
