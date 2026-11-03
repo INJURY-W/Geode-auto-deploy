@@ -1,0 +1,85 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"android": "2.2081"
+	},
+	"id": "heum.line-text",
+	"name": "Line Text",
+	"version": "v1.0.0",
+	"developer": "REVOLVE",
+	"description": "Type text in the editor and it is drawn with thin line objects.",
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3"
+	},
+	"settings": {
+		"object-id": {
+			"type": "int",
+			"name": "Line Object ID",
+			"description": "Object stretched and rotated into each line. Use a plain square deco object with no hitbox (211 by default).",
+			"default": 211,
+			"min": 1,
+			"max": 4600
+		},
+		"font": {
+			"type": "string",
+			"name": "Default Font",
+			"description": "Font picked when the popup opens for the first time (it then remembers your last choice).",
+			"default": "simplex",
+			"one-of": ["simplex", "duplex", "serif", "script", "gothic"]
+		},
+		"cap-height": {
+			"type": "float",
+			"name": "Default Size (px)",
+			"description": "Height of capital letters in pixels (30 px = 1 block).",
+			"default": 30.0,
+			"min": 3.0,
+			"max": 3000.0
+		},
+		"thickness": {
+			"type": "float",
+			"name": "Default Line Width (px)",
+			"description": "Width of the lines in pixels.",
+			"default": 2.0,
+			"min": 0.1,
+			"max": 60.0
+		},
+		"letter-spacing": {
+			"type": "float",
+			"name": "Letter Spacing (px)",
+			"description": "Extra space between letters.",
+			"default": 2.0,
+			"min": -30.0,
+			"max": 300.0
+		},
+		"line-spacing": {
+			"type": "float",
+			"name": "Line Spacing (px)",
+			"description": "Extra space between lines of text (\\n).",
+			"default": 12.0,
+			"min": -100.0,
+			"max": 1000.0
+		},
+		"simplify": {
+			"type": "float",
+			"name": "Curve Simplify (px)",
+			"description": "Curves: points closer than this to a straight line are merged, so fewer objects are used. 0 = keep every point (smoothest, most objects).",
+			"default": 0.5,
+			"min": 0.0,
+			"max": 10.0
+		},
+		"max-scale": {
+			"type": "float",
+			"name": "Max Object Scale",
+			"description": "Longest stretch for one object. Longer lines are split into several objects.",
+			"default": 8.0,
+			"min": 0.5,
+			"max": 50.0
+		},
+		"select-placed": {
+			"type": "bool",
+			"name": "Select Placed Objects",
+			"description": "Select the text right after placing so you can move, recolor or group it.",
+			"default": true
+		}
+	}
+}
